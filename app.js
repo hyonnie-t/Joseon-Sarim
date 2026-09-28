@@ -3,6 +3,13 @@
  * 코딩하지 않는다 (전부 data.js). 함수는 전부 선언만 먼저 하고, 실제
  * 실행(init 호출)은 파일 맨 마지막에 둔다 — IIFE에서 아래쪽 const를
  * 참조하는 TDZ 에러를 피하기 위한 webapp-builder 스킬 규칙.
+ *
+ * v2.0(2026-09-28, 효니 지시 — 제미나이 참고 버전을 바탕으로 구조 압축):
+ * 무오/기묘 각각을 "배경 + 사료 돋보기 모달 + 판단 + 결과 피드백"을 한
+ * 화면에 담는 sahwaStage로, 전환 구간을 카드뉴스형 transitionCards로,
+ * 회고 화면에 서논술형 글쓰기 조합기를 더했다. 글쓰기①(write1) 관련
+ * 함수·마크업은 이번에도 손대지 않았다 — write1/app.js(독립 배포 페이지)와
+ * localStorage를 공유하기 때문(README 참고).
  * ══════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -16,12 +23,19 @@
   var stepIndex = -1; // -1 = 로그인 확인 화면, 0..N-1 = CONTENT.steps
   var submitState = 'idle'; // idle | saving | done | failed
 
+  /* 지금 화면에 걸려 있는 사료 카드를 key로 찾기 위한 임시 맵 — 사료 모달을
+   * 여는 버튼을 누르면 여기서 카드 데이터를 꺼내온다. renderSahwaStage가
+   * 매번 다시 채운다. */
+  var CURRENT_SOURCE_CARDS = {};
+
   /* ── 글쓰기① 전용 상태(v1.2, v1.4) — 카드 분류 단계는 ANSWERS에 바로 반영되지
    * 않는 "몇 번 틀렸는지" 같은 화면 표시용 상태가 필요해서 write1/app.js(독립
    * 페이지)와 같은 방식으로 모듈 변수로 따로 둔다. WRITE1_CLASSIFY는 "담지 않은
    * 카드 더미 ↔ 사림/훈구 상자" 중 상자 쪽에 들어간 카드(확정 전 포함), 확인
    * 결과 맞은 카드만 WRITE1_LOCKED에 true로 남는다. loadAnswers() 직후
-   * initWrite1State()가 저장된 답으로 한 번 맞춰준다. */
+   * initWrite1State()가 저장된 답으로 한 번 맞춰준다.
+   * ⚠️ 아래 write1 관련 블록은 write1/app.js(독립 페이지)와 localStorage를
+   * 공유한다 — 수정 금지(효니 지시, 2026-09-28). */
   var WRITE1_MIN_TEXT_LEN = 10;
   var WRITE1_CARD_ORDER = null;
   var WRITE1_CLASSIFY = {};
@@ -76,40 +90,6 @@
     });
   }
 
-  /* ══════════════ 소스 배지 ══════════════ */
-  function tagClassFor(label) {
-    if (label === '실록 확인') return 'tag-실록';
-    if (label === '교과서') return 'tag-교과서';
-    if (label === '2차') return 'tag-2차';
-    return '';
-  }
-
-  function srcBadgeHtml(sourceId) {
-    var src = SOURCES[sourceId];
-    if (!src) return '';
-    return '<span class="src-tag ' + tagClassFor(src.label) + '" title="' + escapeAttr(src.cite) + '">' + src.label + (src.url ? '' : '') + '</span>';
-  }
-
-  var easySeq = 0;
-  function factHtml(f) {
-    if (!f) return '';
-    if (!f.sourceId) {
-      console.warn('[sourceId 누락] 사실 서술 노드에 sourceId가 없습니다:', f.text);
-    }
-    var id = 'easy_' + (easySeq++);
-    var html = '<div class="fact">';
-    html += '<p>' + escapeHtml(f.text) + '</p>';
-    html += '<div class="fact-meta">' + srcBadgeHtml(f.sourceId);
-    if (!f.verified) html += '<span class="badge-unverified">원문 대조 전</span>';
-    html += '</div>';
-    if (f.easy) {
-      html += '<button type="button" class="easy-toggle" data-target="' + id + '">💬 쉬운 말로 풀어보면 (교사 검수 전)</button>';
-      html += '<div class="easy-box" id="' + id + '" hidden><span class="easy-label">학생용 풀이 · 교사 검수 전</span>' + escapeHtml(f.easy) + '</div>';
-    }
-    html += '</div>';
-    return html;
-  }
-
   function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -130,8 +110,8 @@
 
   /* ── 로그인 확인 화면 (webapp-builder 스킬 필수 항목 ①) ──
    * 포털에서 넘어온 학번/이름을 "화면에 보여주고" 학생이 확인하게 한다.
-   * 자동 채움만 하고 화면을 건너뛰면 안 된다 — 잘못 넘어왔을 때 고칠
-   * 방법이 없어지기 때문. */
+   * 자동 채움만 하고 화면을 건너뛰지 않는다(잘못 넘어왔을 때 고칠 방법이
+   * 없어지기 때문). */
   function renderLogin() {
     var html = '<div class="card">';
     html += '<h2>학번·이름 확인</h2>';
@@ -140,7 +120,6 @@
     html += '<input type="text" inputmode="numeric" maxlength="5" class="text-field" id="loginSid" value="' + escapeAttr(SESSION.sid) + '" placeholder="예: 30512">';
     html += '<label class="field-label">이름</label>';
     html += '<input type="text" class="text-field" id="loginName" value="' + escapeAttr(SESSION.name) + '" placeholder="이름">';
-    html += '<p id="loginError" class="note-box" style="display:none; color:var(--seal); border-color:#F0CFC9;"></p>';
     html += '</div>';
     return {
       html: html,
@@ -165,13 +144,11 @@
     return !!parseStudentId(SESSION.sid) && SESSION.name.trim().length > 0;
   }
 
-  /* ── 글쓰기 ① — 카드 분류(사림·훈구) → 카드 두 장 골라 한 마디 쓰기 (v1.2, v1.4) ──
-   * write1/app.js(독립 배포 페이지)와 같은 흐름을 이 스텝 기반 앱 안에 이식한
-   * 것. 전역 이전/다음 내비게이션은 그대로 두고, 그 안에서 phase(classify/write)
-   * 를 자체적으로 넘긴다 — "확인하기"는 스텝을 넘기는 버튼이 아니라 카드 분류가
-   * 맞았는지만 확인하는 별도 버튼이다.
-   * v1.4: 카드마다 버튼 2개 + 하이라이트만 하던 걸 "담지 않은 카드 더미 → 사림/
-   * 훈구 상자로 실제로 옮겨 담는" 방식으로 바꿨다(write1/app.js와 동일). */
+  /* ══════════════ 글쓰기① — 카드 분류(사림·훈구) → 카드 두 장 골라 한 마디
+   * 쓰기 (v1.2, v1.4). write1/app.js(독립 배포 페이지)와 같은 흐름을 이
+   * 스텝 기반 앱 안에 이식한 것. ⚠️ 이 섹션 전체를 손대지 않는다(효니 지시,
+   * 2026-09-28) — write1/과 localStorage 필드를 공유하고 있어서, 여기를
+   * 고치면 독립 페이지 쪽과 어긋난다. ══════════════ */
   function shuffledIds(cards) {
     var ids = cards.map(function (c) { return c.id; });
     for (var i = ids.length - 1; i > 0; i--) {
@@ -390,253 +367,248 @@
       return ok;
     } catch (e) { return false; }
   }
+  /* ══════════════ 글쓰기① 섹션 끝 ══════════════ */
 
-  function renderBackground(step) {
-    var html = '<div class="card">';
-    html += '<h2>' + escapeHtml(step.title) + '</h2>';
-    if (step.role) html += '<span class="role-badge">' + escapeHtml(step.role) + '</span>';
-    step.facts.forEach(function (f) { html += factHtml(f); });
-    if (step.note) html += '<div class="note-box">' + escapeHtml(step.note) + '</div>';
-    html += '</div>';
-    return { html: html, afterMount: bindEasyToggles };
-  }
-
-  function renderSourceReveal(step) {
-    var html = '<div class="card">';
-    html += '<h2>' + escapeHtml(step.title) + '</h2>';
-    html += '<p class="lead">' + escapeHtml(step.lead) + '</p>';
-    var s = step.source;
-    html += '<div class="source-quote' + (s.verified ? '' : ' placeholder') + '">' + escapeHtml(s.text) + '</div>';
-    html += '<div class="fact-meta">' + srcBadgeHtml(s.sourceId) + (s.verified ? '' : '<span class="badge-unverified">원문 대조 전</span>') + '</div>';
-    if (s.easy) {
-      html += '<button type="button" class="easy-toggle" data-target="' + step.id + '_easy">💬 쉬운 말로 풀어보면 (교사 검수 전)</button>';
-      html += '<div class="easy-box" id="' + step.id + '_easy" hidden><span class="easy-label">학생용 풀이 · 교사 검수 전</span>' + escapeHtml(s.easy) + '</div>';
-    }
-    if (s.fullText) {
-      html += '<button type="button" class="easy-toggle" data-target="' + step.id + '_full">🔎 궁금하면 전문 보기</button>';
-      html += '<div class="easy-box" id="' + step.id + '_full" hidden><div class="source-quote' + (s.verified ? '' : ' placeholder') + '" style="margin-bottom:0;">' + escapeHtml(s.fullText) + '</div></div>';
-    }
-    step.questions.forEach(function (q) {
-      var key = step.id + '_' + q.id;
-      html += '<label class="field-label">' + escapeHtml(q.label) + '</label>';
-      if (q.choices) {
-        html += '<div class="choice-list">';
-        q.choices.forEach(function (c) {
-          html += '<button type="button" class="choice-btn' + (ANSWERS[key] === c.id ? ' selected' : '') + '" data-qkey="' + key + '" data-choice="' + c.id + '">' + escapeHtml(c.label) + '</button>';
-        });
-        html += '</div>';
-      } else {
-        html += '<textarea class="text-field" rows="2" data-key="' + key + '">' + escapeHtml(ANSWERS[key] || '') + '</textarea>';
-        html += hintHtml(key, q.hint);
+  /* ══════════════ 사료 돋보기 모달 ══════════════
+   * 스테이지 화면의 "🔍 사료 돋보기" 버튼이 여는 팝업. 모달 DOM 자체는
+   * index.html에 한 번만 있고(#stepArea 밖), 여기서 내용만 채워 넣는다. */
+  function openSourceModal(card) {
+    var modal = document.getElementById('sourceModal');
+    var titleEl = document.getElementById('modalTitle');
+    var bodyEl = document.getElementById('modalBody');
+    if (!modal || !titleEl || !bodyEl) return;
+    titleEl.textContent = card.title;
+    var bodyHtml = '<p class="lead">' + escapeHtml(card.lead) + '</p>';
+    if (card.text) {
+      bodyHtml += '<div class="source-quote">' + escapeHtml(card.text) + '</div>';
+      if (card.fullText) {
+        bodyHtml += '<button type="button" class="modal-toggle" id="modalFullToggle">🔎 궁금하면 전문 보기</button>';
+        bodyHtml += '<div class="source-quote" id="modalFullText" hidden>' + escapeHtml(card.fullText) + '</div>';
       }
-    });
-    html += '</div>';
-    return {
-      html: html,
-      afterMount: function (root) {
-        bindEasyToggles(root);
-        bindTextFieldsAndHints(root);
-        root.querySelectorAll('.choice-btn[data-qkey]').forEach(function (btn) {
-          btn.addEventListener('click', function () {
-            setAnswer(btn.getAttribute('data-qkey'), btn.getAttribute('data-choice'));
-            renderCurrentStep();
-          });
-        });
-      }
-    };
+    }
+    if (card.tableRows) {
+      bodyHtml += '<table class="cmp-table"><thead><tr><th>조의제문의 표현</th><th>왕이 지목한 대상</th></tr></thead><tbody>';
+      card.tableRows.forEach(function (r) {
+        bodyHtml += '<tr><td>' + escapeHtml(r.left) + '</td><td>' + escapeHtml(r.right) + '</td></tr>';
+      });
+      bodyHtml += '</tbody></table>';
+    }
+    bodyEl.innerHTML = bodyHtml;
+    modal.hidden = false;
+    var fullToggle = document.getElementById('modalFullToggle');
+    if (fullToggle) {
+      fullToggle.addEventListener('click', function () {
+        var box = document.getElementById('modalFullText');
+        if (box) box.hidden = !box.hidden;
+      });
+    }
   }
 
-  function renderSourceTable(step) {
-    var html = '<div class="card">';
-    html += '<h2>' + escapeHtml(step.title) + '</h2>';
-    html += '<p class="lead">' + escapeHtml(step.lead) + '</p>';
-    var t = step.table;
-    html += '<table class="cmp-table"><caption>' + escapeHtml(step.tableCaption) + '</caption>';
-    html += '<thead><tr><th>조의제문의 표현</th><th>왕의 전지가 지목한 대상</th></tr></thead><tbody>';
-    t.rows.forEach(function (r) {
-      html += '<tr><td>' + escapeHtml(r.left) + '</td><td>' + escapeHtml(r.right) + '</td></tr>';
-    });
-    html += '</tbody></table>';
-    html += '<div class="fact-meta">' + srcBadgeHtml(t.sourceId) + (t.verified ? '' : '<span class="badge-unverified">원문 대조 전</span>') + '</div>';
-    var key = step.id + '_' + step.question.id;
-    html += '<label class="field-label">' + escapeHtml(step.question.label) + '</label>';
-    html += '<textarea class="text-field" rows="2" data-key="' + key + '">' + escapeHtml(ANSWERS[key] || '') + '</textarea>';
-    html += hintHtml(key, step.question.hint);
-    html += '</div>';
-    return { html: html, afterMount: function (root) { bindEasyToggles(root); bindTextFieldsAndHints(root); } };
+  function closeSourceModal() {
+    var modal = document.getElementById('sourceModal');
+    if (modal) modal.hidden = true;
   }
 
-  function renderJudgment(step) {
+  /* ══════════════ 사화 스테이지 (배경 + 사료 돋보기 + 판단 + 결과) ══════════════ */
+  function renderSahwaStage(step) {
+    CURRENT_SOURCE_CARDS = {};
+    (step.sourceCards || []).forEach(function (c) { CURRENT_SOURCE_CARDS[c.key] = c; });
+
     var chosenKey = step.id + '_choice';
     var reasonKey = step.id + '_reason';
     var chosen = ANSWERS[chosenKey];
-    var html = '<div class="card">';
+
+    var html = '<div class="card stage-card">';
+    html += '<span class="stage-badge">' + escapeHtml(step.badge) + '</span>';
     html += '<h2>' + escapeHtml(step.title) + '</h2>';
-    html += '<p class="lead">' + escapeHtml(step.lead) + '</p>';
-    html += '<div class="choice-list">';
-    step.choices.forEach(function (c) {
-      html += '<button type="button" class="choice-btn' + (chosen === c.id ? ' selected' : '') + '" data-choice="' + c.id + '">' + escapeHtml('(' + c.id + ') ' + c.label) + '</button>';
+    if (step.role) html += '<span class="role-badge">' + escapeHtml(step.role) + '</span>';
+
+    html += '<div class="stage-facts">';
+    step.bgFacts.forEach(function (f) { html += '<p>' + escapeHtml(f.text) + '</p>'; });
+    html += '</div>';
+
+    if (step.chat) {
+      html += '<div class="chat-card">';
+      html += '<h3>' + escapeHtml(step.chat.title) + '</h3>';
+      html += '<p class="lead">' + escapeHtml(step.chat.lead) + '</p>';
+      html += '<div class="chat-wrap">';
+      step.chat.lines.forEach(function (l) {
+        if (l.narration) {
+          html += '<div class="chat-narration">' + escapeHtml(l.text) + '</div>';
+          return;
+        }
+        var isRoyal = l.speaker === '중종' || l.speaker === '왕';
+        html += '<div class="chat-line' + (isRoyal ? ' royal' : '') + '">';
+        html += '<div class="avatar' + (isRoyal ? ' royal' : '') + '">' + escapeHtml(l.speaker.slice(0, 1)) + '</div>';
+        html += '<div class="chat-body"><div class="who">' + escapeHtml(l.speaker) + '</div><div class="bubble">' + escapeHtml(l.text) + '</div></div>';
+        html += '</div>';
+      });
+      html += '</div></div>';
+    }
+
+    if (step.sourceCards && step.sourceCards.length) {
+      html += '<div class="source-btn-row">';
+      step.sourceCards.forEach(function (c) {
+        html += '<button type="button" class="source-btn" data-source="' + c.key + '">🔍 ' + escapeHtml(c.title) + '</button>';
+      });
+      html += '</div>';
+    }
+
+    html += '<h3 class="judgment-heading">당신의 역사적 선택은?</h3>';
+    html += '<p class="lead">' + escapeHtml(step.judgment.lead) + '</p>';
+    html += '<div class="choice-grid">';
+    step.judgment.choices.forEach(function (c) {
+      html += '<button type="button" class="choice-card' + (chosen === c.id ? ' selected' : '') + '" data-choice="' + c.id + '">';
+      html += '<span class="choice-tag">' + escapeHtml(c.tag) + '</span>';
+      html += '<span class="choice-text">' + escapeHtml('(' + c.id + ') ' + c.label) + '</span>';
+      html += '</button>';
     });
     html += '</div>';
-    html += '<div class="fact-meta">' + srcBadgeHtml(step.choiceSourceId) + '</div>';
-    html += '<label class="field-label">이유를 한 줄로 적어줘.</label>';
+
+    html += '<label class="field-label">이 선택을 한 이유를 한 줄로 적어줘.</label>';
     html += '<textarea class="text-field" rows="2" data-key="' + reasonKey + '">' + escapeHtml(ANSWERS[reasonKey] || '') + '</textarea>';
-    html += hintHtml(reasonKey, step.reasonHint);
+    html += hintHtml(reasonKey, step.judgment.reasonHint);
+
+    if (chosen) {
+      html += '<div class="feedback-box"><strong>⚔️ 실제로는 이렇게 됐어</strong>';
+      html += '<p>' + escapeHtml(step.judgment.feedback[chosen] || '') + '</p>';
+      if (step.resultQuote) html += '<div class="source-quote">' + escapeHtml(step.resultQuote.text) + '</div>';
+      step.resultFacts.forEach(function (f) { html += '<p>' + escapeHtml(f.text) + '</p>'; });
+      html += '</div>';
+    }
+
     html += '</div>';
     return {
       html: html,
       afterMount: function (root) {
-        root.querySelectorAll('.choice-btn').forEach(function (btn) {
+        root.querySelectorAll('.choice-card').forEach(function (btn) {
           btn.addEventListener('click', function () {
             setAnswer(chosenKey, btn.getAttribute('data-choice'));
             renderCurrentStep();
           });
         });
         bindTextFieldsAndHints(root);
-      }
-    };
-  }
-
-  function renderResult(step) {
-    var html = '<div class="card">';
-    html += '<h2>' + escapeHtml(step.title) + '</h2>';
-    if (step.lead) html += '<p class="lead">' + escapeHtml(step.lead) + '</p>';
-    if (step.quote) {
-      html += '<div class="source-quote' + (step.quote.verified ? '' : ' placeholder') + '">' + escapeHtml(step.quote.text) + '</div>';
-      html += '<div class="fact-meta">' + srcBadgeHtml(step.quote.sourceId) + (step.quote.verified ? '' : '<span class="badge-unverified">원문 대조 전</span>') + '</div>';
-      if (step.quote.easy) {
-        html += '<button type="button" class="easy-toggle" data-target="resultQuoteEasy">💬 쉬운 말로 풀어보면 (교사 검수 전)</button>';
-        html += '<div class="easy-box" id="resultQuoteEasy" hidden><span class="easy-label">학생용 풀이 · 교사 검수 전</span>' + escapeHtml(step.quote.easy) + '</div>';
-      }
-    }
-    step.facts.forEach(function (f) { html += factHtml(f); });
-    if (step.addendum) html += factHtml(step.addendum);
-    html += '</div>';
-    return { html: html, afterMount: bindEasyToggles };
-  }
-
-  function renderReflectOptional(step) {
-    var key = 'reflect_' + step.id;
-    var html = '<div class="card">';
-    html += '<h2>' + escapeHtml(step.title) + '</h2>';
-    html += '<label class="field-label">' + escapeHtml(step.question.label) + ' <span style="font-weight:400;color:var(--ink-soft);">(선택)</span></label>';
-    html += '<textarea class="text-field" rows="2" data-key="' + key + '">' + escapeHtml(ANSWERS[key] || '') + '</textarea>';
-    html += hintHtml(key, step.question.hint);
-    html += '</div>';
-    return { html: html, afterMount: bindTextFieldsAndHints };
-  }
-
-  function renderTransition(step) {
-    var html = '<div class="card transition-card">';
-    html += '<h2>' + escapeHtml(step.title) + '</h2>';
-    if (step.years) html += '<div class="transition-years">' + escapeHtml(step.years) + '</div>';
-    html += '<div style="text-align:left;">';
-    step.facts.forEach(function (f) { html += factHtml(f); });
-    if (step.interpretation) html += factHtml(step.interpretation);
-    html += '</div>';
-    if (step.note) html += '<div class="note-box" style="text-align:left;">' + escapeHtml(step.note) + '</div>';
-    if (step.question) {
-      var key = 't_' + step.id;
-      html += '<label class="field-label" style="text-align:left;">' + escapeHtml(step.question.label) + '</label>';
-      html += '<textarea class="text-field" rows="2" data-key="' + key + '">' + escapeHtml(ANSWERS[key] || '') + '</textarea>';
-    }
-    html += '</div>';
-    return { html: html, afterMount: function (root) { bindEasyToggles(root); bindTextFieldsAndHints(root); } };
-  }
-
-  function renderChat(step) {
-    var html = '<div class="card">';
-    html += '<h2>' + escapeHtml(step.title) + '</h2>';
-    html += '<p class="lead">' + escapeHtml(step.lead) + '</p>';
-    html += '<div class="chat-wrap">';
-    step.lines.forEach(function (l) {
-      if (l.narration) {
-        html += '<div class="note-box" style="text-align:center; background:rgba(255,255,255,.6);">' + escapeHtml(l.text) + '</div>';
-        return;
-      }
-      var isRoyal = l.speaker === '중종' || l.speaker === '왕';
-      html += '<div class="chat-line' + (isRoyal ? ' royal' : '') + '">';
-      html += '<div class="who">' + escapeHtml(l.speaker) + '</div>';
-      html += '<div class="bubble">' + escapeHtml(l.text) + '</div>';
-      html += '</div>';
-    });
-    html += '</div>';
-    html += '<div class="fact-meta">' + srcBadgeHtml(step.chatSourceId) + (step.chatVerified ? '' : '<span class="badge-unverified">원문 대조 전</span>') + '</div>';
-    if (step.easySummary) {
-      html += '<button type="button" class="easy-toggle" data-target="chatEasy">' + escapeHtml(step.easyToggleLabel || '쉬운 말로 풀어보면 (교사 검수 전)') + '</button>';
-      html += '<div class="easy-box" id="chatEasy" hidden><span class="easy-label">학생용 풀이 · 교사 검수 전</span>' + escapeHtml(step.easySummary) + '</div>';
-    }
-    html += '</div>';
-    return { html: html, afterMount: bindEasyToggles };
-  }
-
-  function renderInterpretation(step) {
-    var chosenKey = step.id + '_choice';
-    var reasonKey = step.id + '_reason';
-    var chosen = ANSWERS[chosenKey];
-    var html = '<div class="card">';
-    html += '<h2>' + escapeHtml(step.title) + '</h2>';
-    html += '<p class="lead">' + escapeHtml(step.lead) + '</p>';
-    step.views.forEach(function (v) {
-      html += '<div class="view-card' + (chosen === v.id ? ' selected' : '') + '" data-choice="' + v.id + '">';
-      html += '<div class="view-label">' + escapeHtml(v.label) + '</div>';
-      html += '<p>' + escapeHtml(v.text.text) + '</p>';
-      html += '<div class="fact-meta">' + srcBadgeHtml(v.text.sourceId) + '</div>';
-      html += '</div>';
-    });
-    html += '<label class="field-label">' + escapeHtml(step.question.label) + ' <span style="font-weight:400;color:var(--ink-soft);">(선택 입력)</span></label>';
-    html += '<textarea class="text-field" rows="2" data-key="' + reasonKey + '">' + escapeHtml(ANSWERS[reasonKey] || '') + '</textarea>';
-    html += hintHtml(reasonKey, step.question.hint);
-    html += '</div>';
-    return {
-      html: html,
-      afterMount: function (root) {
-        root.querySelectorAll('.view-card').forEach(function (el) {
-          el.addEventListener('click', function () {
-            setAnswer(chosenKey, el.getAttribute('data-choice'));
-            renderCurrentStep();
+        root.querySelectorAll('.source-btn').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var card = CURRENT_SOURCE_CARDS[btn.getAttribute('data-source')];
+            if (card) openSourceModal(card);
           });
         });
-        bindTextFieldsAndHints(root);
       }
     };
+  }
+
+  /* ══════════════ 전환 카드 (카드뉴스형) ══════════════ */
+  function renderTransitionCards(step) {
+    var html = '<div class="card transition-card">';
+    html += '<span class="stage-badge muted">' + escapeHtml(step.badge) + '</span>';
+    html += '<h2>' + escapeHtml(step.title) + '</h2>';
+    html += '<p class="lead">' + escapeHtml(step.lead) + '</p>';
+    html += '<div class="transition-grid">';
+    step.cards.forEach(function (c) {
+      html += '<div class="transition-item">';
+      html += '<div class="transition-item-head"><span class="transition-icon">' + escapeHtml(c.icon) + '</span>';
+      html += '<div><div class="transition-item-title">' + escapeHtml(c.title) + '</div><div class="transition-item-sub">' + escapeHtml(c.sub) + '</div></div></div>';
+      html += '<p>' + escapeHtml(c.desc.text) + '</p>';
+      html += '</div>';
+    });
+    html += '</div>';
+    html += '<div class="callout-box">💡 ' + escapeHtml(step.callout) + '</div>';
+    html += '</div>';
+    return { html: html };
   }
 
   function labelForChoice(step, choiceId) {
-    if (!step || !choiceId) return '';
-    var found = (step.choices || []).filter(function (c) { return c.id === choiceId; })[0];
+    if (!step || !choiceId || !step.judgment) return '';
+    var found = (step.judgment.choices || []).filter(function (c) { return c.id === choiceId; })[0];
     return found ? found.label : choiceId;
+  }
+
+  /* ══════════════ 회고 + 서논술형 글쓰기 조합기 ══════════════ */
+  function essayAutoFillText(step) {
+    var mStep = findStep('m_stage'), kStep = findStep('k_stage'), tStep = findStep('t2');
+    var mLabel = labelForChoice(mStep, ANSWERS.m_stage_choice);
+    var kLabel = labelForChoice(kStep, ANSWERS.k_stage_choice);
+
+    var claimParts = ['나는 무오사화 판단에서 "' + mLabel + '"을(를), 기묘사화 판단에서 "' + kLabel + '"을(를) 선택했다.'];
+    if (ANSWERS.m_stage_reason) claimParts.push(ANSWERS.m_stage_reason);
+    if (ANSWERS.k_stage_reason) claimParts.push(ANSWERS.k_stage_reason);
+    claimParts.push('사림이 거듭된 사화에도 훈구 비판을 멈추지 않은 것은, 자신들이 지켜야 할 원칙을 포기할 수 없었기 때문이라고 생각한다.');
+
+    var evidence = mStep.bgFacts[0].text + ' ' + kStep.bgFacts[1].text;
+
+    var counter = '일각에서는 훈구와 타협하거나 개혁의 속도를 늦추는 편이 더 안전했다고 볼 수 있다. 하지만 사림에게 그것은 3사 언관·대간으로서 지켜야 할 원칙을 스스로 저버리는 일과 같았다.';
+
+    var conclusion = tStep.callout;
+    if (ANSWERS.write1_text) conclusion += ' 글쓰기①에서 내가 쓴 "' + ANSWERS.write1_text + '"도 같은 맥락이다.';
+
+    return { claim: claimParts.join(' '), evidence: evidence, counter: counter, conclusion: conclusion };
   }
 
   function renderRecap(step) {
     var write1Step = findStep('write1');
     var sarimCardText = write1CardText(write1Step, ANSWERS.write1_sarim_card) || '(기록 없음)';
     var hoonguCardText = write1CardText(write1Step, ANSWERS.write1_hoongu_card) || '(기록 없음)';
-    var mStep = findStep('m_judgment'), kStep = findStep('k_judgment'), interpStep = findStep('k_interpret');
+    var mStep = findStep('m_stage'), kStep = findStep('k_stage');
     var html = '<div class="card">';
     html += '<h2>' + escapeHtml(step.title) + '</h2>';
 
     html += '<div class="recap-item"><h3>글쓰기 ① — 고른 카드와 한 마디</h3><div class="recap-value">사림 카드: ' + escapeHtml(sarimCardText) + '<br>훈구 카드: ' + escapeHtml(hoonguCardText) + (ANSWERS.write1_text ? ('<br>' + escapeHtml(ANSWERS.write1_text)) : '') + '</div></div>';
 
-    html += '<div class="recap-item"><h3>무오사화 — 해석 비교</h3>';
-    html += '<div class="recap-value">' + escapeHtml(ANSWERS.m_sourceB_compare || '(기록 없음)') + '</div></div>';
-
     html += '<div class="recap-item"><h3>무오사화 — 네 판단</h3>';
-    html += '<div class="recap-value">' + escapeHtml('(' + (ANSWERS.m_judgment_choice || '?') + ') ' + labelForChoice(mStep, ANSWERS.m_judgment_choice)) + '<br>' + escapeHtml(ANSWERS.m_judgment_reason || '') + '</div></div>';
+    html += '<div class="recap-value">' + escapeHtml('(' + (ANSWERS.m_stage_choice || '?') + ') ' + labelForChoice(mStep, ANSWERS.m_stage_choice)) + '<br>' + escapeHtml(ANSWERS.m_stage_reason || '') + '</div></div>';
 
     html += '<div class="recap-item"><h3>기묘사화 — 네 판단</h3>';
-    html += '<div class="recap-value">' + escapeHtml('(' + (ANSWERS.k_judgment_choice || '?') + ') ' + labelForChoice(kStep, ANSWERS.k_judgment_choice)) + '<br>' + escapeHtml(ANSWERS.k_judgment_reason || '') + '</div></div>';
+    html += '<div class="recap-value">' + escapeHtml('(' + (ANSWERS.k_stage_choice || '?') + ') ' + labelForChoice(kStep, ANSWERS.k_stage_choice)) + '<br>' + escapeHtml(ANSWERS.k_stage_reason || '') + '</div></div>';
 
-    var closerLabel = ANSWERS.k_interpret_choice === 'view1' ? '조광조 일파의 급진성에 무게를 둔 해석' : (ANSWERS.k_interpret_choice === 'view2' ? '위훈삭제론의 타이밍에 무게를 둔 해석' : '(기록 없음)');
-    html += '<div class="recap-item"><h3>기묘사화 — 가까웠던 해석</h3>';
-    html += '<div class="recap-value">' + escapeHtml(closerLabel) + (ANSWERS.k_interpret_reason ? ('<br>' + escapeHtml(ANSWERS.k_interpret_reason)) : '') + '</div></div>';
+    html += '<div class="essay-box">';
+    html += '<span class="stage-badge">✍️ 탐구 서논술문 완성</span>';
+    html += '<h3 class="essay-question">🎯 ' + escapeHtml(step.essayQuestion) + '</h3>';
+    step.essayParts.forEach(function (p) {
+      var key = 'essay_' + p.key;
+      html += '<label class="field-label">' + escapeHtml(p.label) + '</label>';
+      html += '<textarea class="text-field" rows="3" data-key="' + key + '" placeholder="' + escapeAttr(p.placeholder) + '">' + escapeHtml(ANSWERS[key] || '') + '</textarea>';
+    });
+    html += '<div class="essay-actions">';
+    html += '<button type="button" class="nav-btn prev" id="essayAutoFill" style="flex:none; padding:0 16px;">🪄 내 선택으로 자동 완성</button>';
+    html += '<button type="button" class="nav-btn next" id="essayCopy" style="flex:none; padding:0 16px;">📋 복사하기</button>';
+    html += '</div>';
+    html += '<p id="essayCopyStatus" style="margin-top:8px; font-size:.86rem; color:var(--ink-soft);"></p>';
+    html += '</div>';
 
     html += '<div class="padlet-box"><p>' + escapeHtml(step.padletLead) + '</p>';
     html += '<p style="margin-top:8px; font-size:.94rem; color:var(--ink-soft);">' + escapeHtml(step.padletPrompt) + '</p>';
     html += padletLinkHtml('글쓰기 ② 이어서 쓰기');
     html += '<p id="submitStatus" style="margin-top:12px; font-size:.86rem; color:var(--ink-soft);"></p>';
     html += '</div></div>';
-    return { html: html, afterMount: function () { updateSubmitStatus(); } };
+
+    return {
+      html: html,
+      afterMount: function (root) {
+        bindTextFieldsAndHints(root);
+        var autoBtn = root.querySelector('#essayAutoFill');
+        if (autoBtn) {
+          autoBtn.addEventListener('click', function () {
+            var filled = essayAutoFillText(step);
+            step.essayParts.forEach(function (p) { setAnswer('essay_' + p.key, filled[p.key]); });
+            renderCurrentStep();
+          });
+        }
+        var copyBtn = root.querySelector('#essayCopy');
+        if (copyBtn) {
+          copyBtn.addEventListener('click', function () {
+            var lines = step.essayParts.map(function (p) {
+              return '[' + p.label.replace(/^\d+\.\s*/, '') + ']\n' + (ANSWERS['essay_' + p.key] || '');
+            });
+            copyToClipboard(lines.join('\n\n')).then(function (ok) {
+              var el = document.getElementById('essayCopyStatus');
+              if (el) el.textContent = ok ? '복사됐어. 제출란에 붙여넣어줘.' : '복사에 실패했어. 직접 옮겨 적어줘.';
+            });
+          });
+        }
+        updateSubmitStatus();
+      }
+    };
   }
 
   function padletLinkHtml(label) {
@@ -651,15 +623,6 @@
   }
 
   /* ══════════════ 공용 이벤트 바인딩 ══════════════ */
-  function bindEasyToggles(root) {
-    root.querySelectorAll('.easy-toggle').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var box = document.getElementById(btn.getAttribute('data-target'));
-        if (box) box.hidden = !box.hidden;
-      });
-    });
-  }
-
   function bindTextFieldsAndHints(root) {
     root.querySelectorAll('.hint-toggle').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -679,14 +642,7 @@
   function stepIsComplete(step) {
     switch (step.type) {
       case 'write1': return !!ANSWERS.write1_sarim_card && !!ANSWERS.write1_hoongu_card && (ANSWERS.write1_text || '').trim().length >= WRITE1_MIN_TEXT_LEN;
-      case 'sourceReveal': return step.questions.every(function (q) {
-        var key = step.id + '_' + q.id;
-        if (q.choices) return !!ANSWERS[key];
-        return (ANSWERS[key] || '').trim().length > 0;
-      });
-      case 'sourceTable': return (ANSWERS[step.id + '_' + step.question.id] || '').trim().length > 0;
-      case 'judgment': return !!ANSWERS[step.id + '_choice'] && (ANSWERS[step.id + '_reason'] || '').trim().length > 0;
-      case 'interpretation': return !!ANSWERS[step.id + '_choice'];
+      case 'sahwaStage': return !!ANSWERS[step.id + '_choice'] && (ANSWERS[step.id + '_reason'] || '').trim().length > 0;
       default: return true;
     }
   }
@@ -694,15 +650,8 @@
   /* ══════════════ 메인 렌더 루프 ══════════════ */
   var RENDERERS = {
     write1: renderWrite1,
-    background: renderBackground,
-    sourceReveal: renderSourceReveal,
-    sourceTable: renderSourceTable,
-    judgment: renderJudgment,
-    result: renderResult,
-    reflectOptional: renderReflectOptional,
-    transition: renderTransition,
-    chat: renderChat,
-    interpretation: renderInterpretation,
+    sahwaStage: renderSahwaStage,
+    transitionCards: renderTransitionCards,
     recap: renderRecap
   };
 
@@ -780,8 +729,8 @@
 
   /* ══════════════ 최종 제출 (게임활동_로그, 기본 제출 경로 — 별도 action 없음) ══════════════ */
   function buildChoiceSummary() {
-    var m = ANSWERS.m_judgment_choice || '?';
-    var k = ANSWERS.k_judgment_choice || '?';
+    var m = ANSWERS.m_stage_choice || '?';
+    var k = ANSWERS.k_stage_choice || '?';
     return '무오:' + m + ' / 기묘:' + k;
   }
 
@@ -796,14 +745,12 @@
     push('글쓰기① 사림 카드', write1CardText(findStep('write1'), ANSWERS.write1_sarim_card));
     push('글쓰기① 훈구 카드', write1CardText(findStep('write1'), ANSWERS.write1_hoongu_card));
     push('글쓰기① 한 마디', ANSWERS.write1_text);
-    push('조의제문 해석 1', ANSWERS.m_sourceA_q1);
-    push('조의제문 해석 2', ANSWERS.m_sourceA_q2);
-    push('해석 비교', ANSWERS.m_sourceB_compare);
-    push('무오 판단 이유', ANSWERS.m_judgment_reason);
-    push('무오 성찰', ANSWERS.reflect_m_reflect);
-    push('갑자·중종반정 비교', ANSWERS.t_t1);
-    push('기묘 판단 이유', ANSWERS.k_judgment_reason);
-    push('해석 갈림 이유', ANSWERS.k_interpret_reason);
+    push('무오 판단 이유', ANSWERS.m_stage_reason);
+    push('기묘 판단 이유', ANSWERS.k_stage_reason);
+    push('서논술 주장', ANSWERS.essay_claim);
+    push('서논술 근거', ANSWERS.essay_evidence);
+    push('서논술 반론', ANSWERS.essay_counter);
+    push('서논술 결론', ANSWERS.essay_conclusion);
     return lines.join('\n');
   }
 
@@ -861,6 +808,15 @@
 
     document.getElementById('navNext').addEventListener('click', goNext);
     document.getElementById('navPrev').addEventListener('click', goPrev);
+
+    var modalClose = document.getElementById('modalClose');
+    if (modalClose) modalClose.addEventListener('click', closeSourceModal);
+    var modalBackdrop = document.getElementById('sourceModal');
+    if (modalBackdrop) {
+      modalBackdrop.addEventListener('click', function (e) {
+        if (e.target === modalBackdrop) closeSourceModal();
+      });
+    }
 
     renderCurrentStep();
   }

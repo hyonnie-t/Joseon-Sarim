@@ -2,6 +2,14 @@
  * style.css — history26 포털의 "역사책 페이지" 톤(종이/먹/쪽빛/낙관)을
  * 그대로 가져와 통일감을 준다. 디자인 토큰은 history26/style.css의
  * :root 값과 동일하게 맞췄다.
+ *
+ * v2.0(2026-09-28, 효니 지시 — 제미나이 참고 버전을 바탕으로 UI 재구성):
+ * 카드뉴스형 전환 카드, 사료 돋보기 모달, 태그가 붙은 선택 카드, 아바타가
+ * 있는 챗버블, 서논술 글쓰기 조합기 스타일을 새로 추가했다. ⚠️ write1/
+ * 독립 페이지가 ../style.css를 그대로 불러 쓰므로, .card · .choice-btn ·
+ * .sort- 계열 · .text-field · .field-label · .hint- 계열 · .padlet- 계열 ·
+ * .nav- 계열 · .note-box · .role-badge · .recap- 계열 규칙은 이번에도 그대로
+ * 유지했다(제거·이름 변경 금지).
  * ══════════════════════════════════════════════════════════ */
 :root{
   --paper:#F6F3EB;
@@ -34,6 +42,8 @@ html{font-size:16px;}
 body{
   font-family:var(--font-body);
   background:var(--paper);
+  background-image:radial-gradient(rgba(35,38,44,.05) 1.5px, transparent 1.5px);
+  background-size:22px 22px;
   color:var(--ink);
   line-height:1.6;
   font-size:1rem; /* 16px 이상 유지 */
@@ -46,10 +56,10 @@ body{
 /* ── 진행 표시줄 ── */
 .progress-wrap{position:sticky; top:0; z-index:10; background:var(--paper); padding:10px 0 14px;}
 .progress-track{height:6px; border-radius:999px; background:var(--line); overflow:hidden;}
-.progress-fill{height:100%; background:var(--indigo); transition:width .3s ease;}
+.progress-fill{height:100%; background:linear-gradient(90deg, var(--indigo), var(--ochre)); transition:width .3s ease;}
 .progress-label{font-size:.86rem; color:var(--ink-soft); margin-top:6px; text-align:right;}
 
-/* ── 카드 공통 ── */
+/* ── 카드 공통 (write1/도 그대로 쓰는 베이스 — 이름 변경 금지) ── */
 .card{
   background:var(--card);
   border:1px solid var(--line);
@@ -60,9 +70,10 @@ body{
 }
 .card h2{
   font-family:var(--font-display);
-  font-size:1.25rem;
+  font-size:1.3rem;
   margin-bottom:10px;
   color:var(--indigo-deep);
+  line-height:1.4;
 }
 .card .role-badge{
   display:inline-block; font-size:.86rem; color:var(--indigo-deep);
@@ -70,62 +81,106 @@ body{
 }
 .lead{color:var(--ink-soft); margin-bottom:14px; font-size:1.02rem;}
 
-/* ── 사실 서술 노드 ── */
-.fact{margin-bottom:14px; padding-left:14px; border-left:3px solid var(--line);}
-.fact p{font-size:1.03rem;}
-.fact-meta{margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
-.src-tag{
-  font-size:.78rem; padding:2px 9px; border-radius:999px; border:1px solid var(--line);
-  color:var(--ink-soft); background:var(--paper); white-space:nowrap;
+/* ── 스테이지 배지 · 배경 서술 ── */
+.stage-badge{
+  display:inline-block; font-size:.8rem; font-weight:700; color:var(--indigo-deep);
+  background:var(--indigo-bg); border:1px solid #CFE0EF; border-radius:999px;
+  padding:4px 12px; margin-bottom:12px;
 }
-.src-tag.tag-실록{border-color:var(--jade-border); background:var(--jade-bg); color:#254A37;}
-.src-tag.tag-교과서{border-color:#CFE0EF; background:#EEF4FB; color:var(--indigo-deep);}
-.src-tag.tag-2차{border-color:var(--amber-border); background:var(--amber-bg); color:var(--amber-text-deep);}
-.badge-unverified{
-  font-size:.78rem; padding:2px 9px; border-radius:999px;
-  background:#FBEAE8; color:var(--seal); border:1px solid #F0CFC9;
-}
-.easy-toggle{
-  margin-top:8px; font-size:.9rem; background:none; border:none; color:var(--indigo);
-  text-decoration:underline; cursor:pointer; padding:4px 0; min-height:var(--tap-min); text-align:left;
-}
-.easy-box{
-  margin-top:8px; padding:10px 12px; background:var(--indigo-bg); border-radius:var(--radius-xs);
-  font-size:.96rem; color:var(--ink);
-}
-.easy-box .easy-label{display:block; font-size:.78rem; color:var(--indigo-deep); margin-bottom:4px; font-weight:600;}
+.stage-badge.muted{color:var(--ink-soft); background:#F0EDE3; border-color:var(--line);}
+.stage-facts{margin-bottom:16px;}
+.stage-facts p{font-size:1.03rem; margin-bottom:8px;}
+.stage-facts p:last-child{margin-bottom:0;}
 
-/* ── 사료 원문 인용 박스 ── */
+/* ── 사료 돋보기 버튼 · 인용 박스 ── */
+.source-btn-row{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:18px;}
+.source-btn{
+  min-height:var(--tap-min); padding:8px 14px; border-radius:999px; border:1.5px solid var(--amber-border);
+  background:var(--amber-bg); color:var(--amber-text-deep); font-size:.9rem; font-weight:700; cursor:pointer;
+}
 .source-quote{
   background:var(--indigo-bg); border-radius:var(--radius-xs); padding:16px;
   font-family:var(--font-display); font-size:1.05rem; white-space:pre-wrap; line-height:1.8;
   margin-bottom:10px;
 }
-.source-quote.placeholder{
-  background:#FBEAE8; color:#7A2E24; font-family:var(--font-body); font-size:.95rem;
-}
-
-/* ── 표 ── */
 table.cmp-table{width:100%; border-collapse:collapse; margin-bottom:10px; font-size:.96rem;}
-table.cmp-table caption{caption-side:top; text-align:left; font-size:.86rem; color:var(--ink-soft); margin-bottom:6px;}
 table.cmp-table th, table.cmp-table td{border:1px solid var(--line); padding:8px 10px; text-align:left;}
 table.cmp-table th{background:#F0EDE3;}
-
-/* ── 말풍선 채팅 ── */
-.chat-wrap{background:#B8C6D6; border-radius:var(--radius); padding:16px; margin-bottom:10px;}
-.chat-line{display:flex; margin-bottom:10px; gap:8px;}
-.chat-line .who{
-  flex:0 0 auto; font-size:.8rem; color:var(--ink-soft); align-self:flex-end; margin-bottom:4px; min-width:52px; text-align:right;
+.modal-toggle{
+  margin-top:4px; font-size:.9rem; background:none; border:none; color:var(--indigo);
+  text-decoration:underline; cursor:pointer; padding:4px 0; min-height:var(--tap-min); text-align:left;
 }
+
+/* ── 사료 돋보기 모달 ── */
+.modal-backdrop{
+  position:fixed; inset:0; background:rgba(20,16,10,.55); z-index:100;
+  display:flex; align-items:center; justify-content:center; padding:16px;
+}
+.modal-backdrop[hidden]{display:none;}
+.modal-box{
+  background:var(--card); max-width:520px; width:100%; max-height:84vh; overflow-y:auto;
+  border-radius:var(--radius); border:2px solid var(--ochre); box-shadow:var(--shadow);
+  padding:24px 20px; position:relative;
+}
+.modal-close{
+  position:absolute; top:14px; right:14px; background:none; border:none; font-size:1.1rem;
+  color:var(--ink-soft); cursor:pointer; min-height:var(--tap-min); min-width:var(--tap-min);
+}
+.modal-kicker{font-size:.8rem; font-weight:700; color:var(--seal); margin-bottom:6px;}
+.modal-title{font-family:var(--font-display); font-size:1.15rem; color:var(--indigo-deep); margin-bottom:14px; padding-right:32px;}
+
+/* ── 말풍선 채팅 (아바타 포함) ── */
+.chat-card{margin-bottom:18px;}
+.chat-card h3{font-family:var(--font-display); font-size:1.05rem; color:var(--indigo-deep); margin-bottom:6px;}
+.chat-wrap{background:#B8C6D6; border-radius:var(--radius); padding:16px;}
+.chat-line{display:flex; gap:8px; margin-bottom:12px; align-items:flex-end;}
+.chat-line:last-child{margin-bottom:0;}
+.avatar{
+  flex:0 0 auto; width:34px; height:34px; border-radius:50%; background:var(--seal); color:#fff;
+  display:flex; align-items:center; justify-content:center; font-weight:700; font-size:.9rem;
+  border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.2);
+}
+.avatar.royal{background:var(--ochre);}
+.chat-line.royal{flex-direction:row-reverse;}
+.chat-body{display:flex; flex-direction:column; max-width:78%;}
+.chat-line.royal .chat-body{align-items:flex-end;}
+.who{font-size:.78rem; color:var(--ink-soft); margin-bottom:3px;}
 .bubble{
   background:#FEE500; color:#1B1B1B; padding:10px 14px; border-radius:16px 16px 16px 4px;
-  font-size:1rem; max-width:78%; box-shadow:0 1px 3px rgba(0,0,0,.15);
+  font-size:1rem; box-shadow:0 1px 3px rgba(0,0,0,.15);
 }
-.chat-line.royal{flex-direction:row-reverse;}
-.chat-line.royal .who{text-align:left;}
 .chat-line.royal .bubble{background:#FFFFFF; border-radius:16px 16px 4px 16px;}
+.chat-narration{
+  text-align:center; font-size:.86rem; color:var(--ink-soft); background:rgba(255,255,255,.65);
+  border-radius:999px; padding:6px 12px; margin:6px auto; max-width:80%;
+}
 
-/* ── 선택지 버튼 ── */
+/* ── 판단 — 선택 카드 ── */
+.judgment-heading{font-family:var(--font-display); font-size:1.05rem; color:var(--indigo-deep); margin-bottom:6px;}
+.choice-grid{display:flex; flex-direction:column; gap:10px; margin-bottom:14px;}
+.choice-card{
+  min-height:var(--tap-min); text-align:left; padding:14px 16px; border-radius:var(--radius-sm);
+  border:1.5px solid var(--line); background:var(--card); cursor:pointer;
+  display:flex; flex-direction:column; gap:6px; transition:border-color .15s, background .15s, transform .1s;
+}
+.choice-card:active{transform:scale(.99);}
+.choice-card.selected{border-color:var(--indigo); background:var(--indigo-bg);}
+.choice-tag{
+  align-self:flex-start; font-size:.72rem; font-weight:700; padding:2px 9px; border-radius:999px;
+  background:var(--amber-bg); color:var(--amber-text-deep); border:1px solid var(--amber-border);
+}
+.choice-text{font-size:1rem; line-height:1.5;}
+
+/* ── 판단 결과 피드백 ── */
+.feedback-box{
+  margin-top:14px; padding:16px; background:#FBEAE8; border:1.5px solid #F0CFC9; border-radius:var(--radius-sm);
+}
+.feedback-box strong{display:block; font-size:.95rem; color:var(--seal); margin-bottom:8px;}
+.feedback-box p{font-size:.98rem; margin-bottom:8px; line-height:1.6;}
+.feedback-box p:last-child{margin-bottom:0;}
+.feedback-box .source-quote{background:#FFFFFF;}
+
+/* ── 선택지 버튼 (글쓰기① 등 공용 — write1/에서도 사용, 이름 변경 금지) ── */
 .choice-list{display:flex; flex-direction:column; gap:10px; margin-bottom:14px;}
 .choice-btn{
   min-height:var(--tap-min); text-align:left; padding:14px 16px; border-radius:var(--radius-sm);
@@ -135,9 +190,7 @@ table.cmp-table th{background:#F0EDE3;}
 .choice-btn:active{transform:scale(.99);}
 .choice-btn.selected{border-color:var(--indigo); background:var(--indigo-bg); font-weight:600;}
 
-/* ── 카드 분류(글쓰기① 사림·훈구) — "담지 않은 카드" 더미에서 두 상자로 담는 방식.
- * 버튼을 누르면 카드가 실제로 그 상자 밑으로 옮겨가 보여서(칩 형태), 분류 결과가
- * 눈에 바로 반영된다. 상자 색은 사림=쪽빛(jade), 훈구=금빛(amber)로 구분한다. */
+/* ── 카드 분류(글쓰기① 사림·훈구) — write1/app.js와 공유. 절대 수정 금지. */
 .sort-board{display:flex; flex-direction:column; gap:14px; margin-bottom:14px;}
 .sort-pool{border:1.5px dashed var(--line); border-radius:var(--radius-sm); padding:12px 14px; background:var(--paper);}
 .sort-pool-head{
@@ -186,7 +239,7 @@ table.cmp-table th{background:#F0EDE3;}
   .sort-zones{grid-template-columns:1fr;}
 }
 
-/* ── 입력창 ── */
+/* ── 입력창 (write1/도 공유 — 이름 변경 금지) ── */
 .text-field{
   width:100%; min-height:var(--tap-min); padding:10px 12px; border:1.5px solid var(--line);
   border-radius:var(--radius-sm); font-size:1rem; font-family:var(--font-body); resize:vertical;
@@ -202,7 +255,7 @@ table.cmp-table th{background:#F0EDE3;}
   border-radius:var(--radius-xs); font-size:.92rem; color:var(--amber-text-deep);
 }
 
-/* ── 하단 내비게이션 ── */
+/* ── 하단 내비게이션 (write1/도 공유 — 이름 변경 금지) ── */
 .nav-row{display:flex; gap:10px; margin-top:18px;}
 .nav-btn{
   flex:1; min-height:48px; border-radius:var(--radius-sm); font-size:1.02rem; font-weight:600;
@@ -212,21 +265,38 @@ table.cmp-table th{background:#F0EDE3;}
 .nav-btn.next:disabled{background:#B9C2CE; cursor:not-allowed;}
 .nav-btn.prev{background:var(--card); color:var(--ink-soft); border:1.5px solid var(--line);}
 
-/* ── 해석 갈림 카드 ── */
-.view-card{border:1.5px solid var(--line); border-radius:var(--radius-sm); padding:14px; margin-bottom:10px; cursor:pointer;}
-.view-card.selected{border-color:var(--ochre); background:#FFF7EA;}
-.view-card .view-label{font-size:.8rem; color:var(--ink-soft); margin-bottom:4px;}
-
-/* ── 전환 카드 ── */
-.transition-card{text-align:center; padding:28px 20px;}
-.transition-years{
-  font-family:var(--font-display); font-size:1.1rem; color:var(--seal); margin-bottom:16px;
+/* ── 전환 카드 (카드뉴스형) ── */
+.transition-card{padding:26px 20px;}
+.transition-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;}
+.transition-item{
+  border:1.5px solid var(--line); border-radius:var(--radius-sm); padding:14px; background:var(--paper);
+}
+.transition-item-head{display:flex; align-items:flex-start; gap:10px; margin-bottom:8px;}
+.transition-icon{font-size:1.4rem; line-height:1;}
+.transition-item-title{font-weight:700; font-size:.96rem; color:var(--indigo-deep);}
+.transition-item-sub{font-size:.78rem; color:var(--ink-soft); margin-top:2px;}
+.transition-item p{font-size:.92rem; line-height:1.55;}
+.callout-box{
+  background:var(--jade-bg); border:1px solid var(--jade-border); border-radius:var(--radius-sm);
+  padding:14px 16px; font-size:.94rem; line-height:1.6;
+}
+@media (max-width:520px){
+  .transition-grid{grid-template-columns:1fr;}
 }
 
 /* ── 회고 화면 ── */
 .recap-item{border-left:3px solid var(--jade); padding-left:14px; margin-bottom:16px;}
 .recap-item h3{font-size:1rem; margin-bottom:6px; color:var(--indigo-deep);}
 .recap-item .recap-value{background:var(--jade-bg); border-radius:var(--radius-xs); padding:8px 12px; font-size:.96rem;}
+
+/* ── 서논술형 글쓰기 조합기 ── */
+.essay-box{
+  margin-top:18px; padding:18px; background:var(--paper); border:1.5px solid var(--ochre);
+  border-radius:var(--radius);
+}
+.essay-question{font-family:var(--font-display); font-size:1.05rem; color:var(--indigo-deep); margin:6px 0 10px; line-height:1.5;}
+.essay-actions{display:flex; gap:10px; margin-top:14px; flex-wrap:wrap;}
+
 .padlet-box{
   margin-top:20px; padding:18px; background:var(--indigo-bg); border-radius:var(--radius);
   text-align:center;
@@ -236,7 +306,7 @@ table.cmp-table th{background:#F0EDE3;}
   border-radius:999px; text-decoration:none; font-weight:600; min-height:var(--tap-min);
 }
 
-/* ── 안내/경고 박스 ── */
+/* ── 안내/경고 박스 (write1/도 공유 — 이름 변경 금지) ── */
 .note-box{
   font-size:.9rem; color:var(--ink-soft); background:var(--paper); border:1px dashed var(--line);
   border-radius:var(--radius-xs); padding:10px 12px; margin-top:10px;
