@@ -67,7 +67,7 @@ function collectHints(node, path) {
   if (!node || typeof node !== 'object') return;
   if (Array.isArray(node)) { node.forEach((v, i) => collectHints(v, path + '[' + i + ']')); return; }
   Object.keys(node).forEach((k) => {
-    if ((k === 'hint' || k === 'reasonHint') && typeof node[k] === 'string') {
+    if ((k === 'hint' || k === 'reasonHint' || k === 'writingHint') && typeof node[k] === 'string') {
       hints.push({ path: path + '.' + k, text: node[k] });
     }
     collectHints(node[k], path + '.' + k);

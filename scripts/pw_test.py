@@ -32,12 +32,20 @@ with sync_playwright() as p:
     page.goto(BASE)
     page.wait_for_load_state("networkidle")
 
+    # 로그인 확인 화면부터 시작 — sid/name이 화면에 보이는지 먼저 확인
+    sid_val = page.locator("#loginSid").input_value()
+    name_val = page.locator("#loginName").input_value()
+    assert sid_val == "30512", f"학번 자동 채움 실패: {sid_val!r}"
+    assert name_val == "테스트", f"이름 자동 채움 실패: {name_val!r}"
+    print(f"[login] sid={sid_val!r} name={name_val!r} — 화면에 노출 확인됨")
+    click_next(page)
+
     step_count = 0
     max_steps = 20
     while step_count < max_steps:
         step_count += 1
-        # step 0: start choice
-        if page.locator('.choice-btn[data-choice="criticize"]').count() > 0 and not page.locator('.choice-btn.selected').count():
+        # write1 / start 선택 버튼
+        if page.locator('.choice-btn[data-choice="criticize"]').count() > 0 and not page.locator('.choice-list .choice-btn.selected').count():
             click_choice(page, "criticize")
         # judgment steps (A/B/C)
         for cid in ["A", "B", "C"]:

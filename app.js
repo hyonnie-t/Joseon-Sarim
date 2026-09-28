@@ -13,7 +13,7 @@
 
   var SESSION = { sid: '', name: '', grade: null, ban: null, number: null, preview: false };
   var ANSWERS = {};
-  var stepIndex = 0;
+  var stepIndex = -1; // -1 = 로그인 확인 화면, 0..N-1 = CONTENT.steps
   var submitState = 'idle'; // idle | saving | done | failed
 
   /* ── 학번 파싱: 학년(1) + 반(2) + 번호(2) 5자리. history26 parseStudentId()와 같은 규칙. ── */
@@ -115,8 +115,49 @@
    * 각 render*는 { html, afterMount } 형태를 돌려준다. afterMount(root)는
    * DOM이 실제로 붙은 뒤 이벤트 리스너를 다는 콜백. */
 
-  function renderStart(step) {
-    var chosen = ANSWERS.start_choice;
+  /* ── 로그인 확인 화면 (webapp-builder 스킬 필수 항목 ①) ──
+   * 포털에서 넘어온 학번/이름을 "화면에 보여주고" 학생이 확인하게 한다.
+   * 자동 채움만 하고 화면을 건너뛰면 안 된다 — 잘못 넘어왔을 때 고칠
+   * 방법이 없어지기 때문. */
+  function renderLogin() {
+    var html = '<div class="card">';
+    html += '<h2>학번·이름 확인</h2>';
+    html += '<p class="lead">포털에서 넘어온 값이야. 맞는지 확인하고, 틀렸으면 고쳐줘.</p>';
+    html += '<label class="field-label">학번 (5자리)</label>';
+    html += '<input type="text" inputmode="numeric" maxlength="5" class="text-field" id="loginSid" value="' + escapeAttr(SESSION.sid) + '" placeholder="예: 30512">';
+    html += '<label class="field-label">이름</label>';
+    html += '<input type="text" class="text-field" id="loginName" value="' + escapeAttr(SESSION.name) + '" placeholder="이름">';
+    html += '<p id="loginError" class="note-box" style="display:none; color:var(--seal); border-color:#F0CFC9;"></p>';
+    html += '</div>';
+    return {
+      html: html,
+      afterMount: function (root) {
+        // 이 화면엔 "다음" 버튼 대신 자체 확인 버튼을 쓰지 않고, 공용 다음 버튼을 그대로 쓰되
+        // 입력값 변경 시마다 SESSION을 갱신해서 다음 버튼 활성화 조건에 반영한다.
+        function syncFromInputs() {
+          SESSION.sid = root.querySelector('#loginSid').value.trim();
+          SESSION.name = root.querySelector('#loginName').value.trim();
+          var parsed = parseStudentId(SESSION.sid);
+          if (parsed) { SESSION.grade = parsed.grade; SESSION.ban = parsed.ban; SESSION.number = parsed.number; }
+          else { SESSION.grade = null; SESSION.ban = null; SESSION.number = null; }
+          updateNavState();
+        }
+        root.querySelector('#loginSid').addEventListener('input', syncFromInputs);
+        root.querySelector('#loginName').addEventListener('input', syncFromInputs);
+      }
+    };
+  }
+
+  function loginIsComplete() {
+    return !!parseStudentId(SESSION.sid) && SESSION.name.trim().length > 0;
+  }
+
+  /* ── 글쓰기 ① — 실제로 여기서 쓰고, 다 쓰면 복사해서 Padlet에 붙여넣는다 ── */
+  function renderWrite1(step) {
+    var chosenKey = step.id + '_choice';
+    var textKey = step.id + '_text';
+    var chosen = ANSWERS[chosenKey];
+    var text = ANSWERS[textKey] || '';
     var html = '<div class="card">';
     html += '<h2>' + escapeHtml(step.title) + '</h2>';
     html += '<p class="lead">' + escapeHtml(step.lead) + '</p>';
@@ -125,18 +166,60 @@
     step.options.forEach(function (opt) {
       html += '<button type="button" class="choice-btn' + (chosen === opt.id ? ' selected' : '') + '" data-choice="' + opt.id + '">' + escapeHtml(opt.label) + '</button>';
     });
+    html += '</div>';
+    html += '<label class="field-label">' + escapeHtml(step.writingLabel) + '</label>';
+    html += '<textarea class="text-field" rows="4" data-key="' + textKey + '">' + escapeHtml(text) + '</textarea>';
+    html += hintHtml(textKey, step.writingHint);
+    html += '<div class="padlet-box" style="margin-top:16px;">';
+    html += '<p>' + escapeHtml(step.copyLead) + '</p>';
+    html += '<button type="button" class="nav-btn next" id="copyWrite1" style="margin-top:10px; display:inline-block; width:auto; padding:0 20px;">복사하기</button>';
+    html += ' ' + padletLinkHtml('Padlet 열어서 붙여넣기');
+    html += '<p id="copyStatus" style="margin-top:8px; font-size:.86rem; color:var(--ink-soft);"></p>';
     html += '</div></div>';
     return {
       html: html,
       afterMount: function (root) {
         root.querySelectorAll('.choice-btn').forEach(function (btn) {
           btn.addEventListener('click', function () {
-            setAnswer('start_choice', btn.getAttribute('data-choice'));
+            setAnswer(chosenKey, btn.getAttribute('data-choice'));
             renderCurrentStep();
           });
         });
+        bindTextFieldsAndHints(root);
+        var copyBtn = root.querySelector('#copyWrite1');
+        if (copyBtn) {
+          copyBtn.addEventListener('click', function () {
+            var choiceLabel = labelForChoice(step, ANSWERS[chosenKey]);
+            var payload = '[글쓰기①] ' + (choiceLabel || '') + '\n' + (ANSWERS[textKey] || '');
+            copyToClipboard(payload).then(function (ok) {
+              var statusEl = document.getElementById('copyStatus');
+              if (statusEl) statusEl.textContent = ok ? '복사됐어. Padlet에 붙여넣어줘.' : '복사에 실패했어. 직접 옮겨 적어줘.';
+            });
+          });
+        }
       }
     };
+  }
+
+  function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(function () { return true; }).catch(function () { return fallbackCopy(text); });
+    }
+    return Promise.resolve(fallbackCopy(text));
+  }
+
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      var ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
   }
 
   function renderBackground(step) {
@@ -334,12 +417,12 @@
   }
 
   function renderRecap(step) {
-    var startLabel = ANSWERS.start_choice === 'criticize' ? '비판한다' : (ANSWERS.start_choice === 'endure' ? '참는다' : '(기록 없음)');
+    var startLabel = ANSWERS.write1_choice === 'criticize' ? '비판한다' : (ANSWERS.write1_choice === 'endure' ? '참는다' : '(기록 없음)');
     var mStep = findStep('m_judgment'), kStep = findStep('k_judgment'), interpStep = findStep('k_interpret');
     var html = '<div class="card">';
     html += '<h2>' + escapeHtml(step.title) + '</h2>';
 
-    html += '<div class="recap-item"><h3>글쓰기 ① 때 선택</h3><div class="recap-value">' + escapeHtml(startLabel) + '</div></div>';
+    html += '<div class="recap-item"><h3>글쓰기 ① — 네 선택과 이유</h3><div class="recap-value">' + escapeHtml(startLabel) + (ANSWERS.write1_text ? ('<br>' + escapeHtml(ANSWERS.write1_text)) : '') + '</div></div>';
 
     html += '<div class="recap-item"><h3>무오사화 — 해석 비교</h3>';
     html += '<div class="recap-value">' + escapeHtml(ANSWERS.m_sourceB_compare || '(기록 없음)') + '</div></div>';
@@ -356,17 +439,17 @@
 
     html += '<div class="padlet-box"><p>' + escapeHtml(step.padletLead) + '</p>';
     html += '<p style="margin-top:8px; font-size:.94rem; color:var(--ink-soft);">' + escapeHtml(step.padletPrompt) + '</p>';
-    html += padletLinkHtml();
+    html += padletLinkHtml('글쓰기 ② 이어서 쓰기');
     html += '<p id="submitStatus" style="margin-top:12px; font-size:.86rem; color:var(--ink-soft);"></p>';
     html += '</div></div>';
     return { html: html, afterMount: function () { updateSubmitStatus(); } };
   }
 
-  function padletLinkHtml() {
+  function padletLinkHtml(label) {
     if (!SESSION.ban || !CONFIG.PADLET_BY_BAN[SESSION.ban]) {
       return '<div class="note-box">담당 반 정보가 없어서 링크를 자동으로 못 찾았어. 선생님께 문의해줘.</div>';
     }
-    return '<a class="padlet-link" href="' + escapeAttr(CONFIG.PADLET_BY_BAN[SESSION.ban]) + '" target="_blank" rel="noopener">글쓰기 ② 이어서 쓰기</a>';
+    return '<a class="padlet-link" href="' + escapeAttr(CONFIG.PADLET_BY_BAN[SESSION.ban]) + '" target="_blank" rel="noopener">' + escapeHtml(label || 'Padlet 열기') + '</a>';
   }
 
   function findStep(id) {
@@ -401,7 +484,7 @@
   /* ══════════════ 스텝 완료 판정 (다음 버튼 활성화 조건) ══════════════ */
   function stepIsComplete(step) {
     switch (step.type) {
-      case 'start': return !!ANSWERS.start_choice;
+      case 'write1': return !!ANSWERS[step.id + '_choice'] && (ANSWERS[step.id + '_text'] || '').trim().length > 0;
       case 'sourceReveal': return step.questions.every(function (q) { return (ANSWERS[step.id + '_' + q.id] || '').trim().length > 0; });
       case 'sourceTable': return (ANSWERS[step.id + '_' + step.question.id] || '').trim().length > 0;
       case 'judgment': return !!ANSWERS[step.id + '_choice'] && (ANSWERS[step.id + '_reason'] || '').trim().length > 0;
@@ -412,7 +495,7 @@
 
   /* ══════════════ 메인 렌더 루프 ══════════════ */
   var RENDERERS = {
-    start: renderStart,
+    write1: renderWrite1,
     background: renderBackground,
     sourceReveal: renderSourceReveal,
     sourceTable: renderSourceTable,
@@ -426,33 +509,50 @@
   };
 
   function renderCurrentStep() {
-    var step = CONTENT.steps[stepIndex];
     var stepArea = document.getElementById('stepArea');
-    var renderer = RENDERERS[step.type];
-    var out = renderer(step);
+    var out;
+    if (stepIndex === -1) {
+      out = renderLogin();
+    } else {
+      var step = CONTENT.steps[stepIndex];
+      var renderer = RENDERERS[step.type];
+      out = renderer(step);
+    }
     stepArea.innerHTML = out.html;
     if (out.afterMount) out.afterMount(stepArea);
     updateProgress();
     updateNavState();
     window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
 
-    if (step.type === 'recap' && !SESSION.preview) {
+    if (stepIndex >= 0 && CONTENT.steps[stepIndex].type === 'recap' && !SESSION.preview) {
       submitFinalIfNeeded();
     }
   }
 
   function updateProgress() {
     var total = CONTENT.steps.length;
+    if (stepIndex === -1) {
+      document.getElementById('progressFill').style.width = '0%';
+      document.getElementById('progressLabel').textContent = '학번 확인';
+      return;
+    }
     var pct = Math.round(((stepIndex) / (total - 1)) * 100);
     document.getElementById('progressFill').style.width = pct + '%';
     document.getElementById('progressLabel').textContent = (stepIndex + 1) + ' / ' + total;
   }
 
   function updateNavState() {
-    var step = CONTENT.steps[stepIndex];
     var nextBtn = document.getElementById('navNext');
     var prevBtn = document.getElementById('navPrev');
-    prevBtn.style.visibility = stepIndex === 0 ? 'hidden' : 'visible';
+    prevBtn.style.visibility = (stepIndex <= 0) ? 'hidden' : 'visible';
+
+    if (stepIndex === -1) {
+      nextBtn.style.display = 'block';
+      nextBtn.disabled = !loginIsComplete();
+      nextBtn.textContent = '확인하고 시작하기';
+      return;
+    }
+    var step = CONTENT.steps[stepIndex];
     if (step.type === 'recap') {
       nextBtn.style.display = 'none';
     } else {
@@ -463,10 +563,17 @@
   }
 
   function goNext() {
+    if (stepIndex === -1) {
+      if (!loginIsComplete()) return;
+      loadAnswers(); // 확정된 SESSION.sid로 그 학생의 저장 기록을 불러온다
+      stepIndex = 0;
+      renderCurrentStep();
+      return;
+    }
     if (stepIndex < CONTENT.steps.length - 1) { stepIndex++; renderCurrentStep(); }
   }
   function goPrev() {
-    if (stepIndex > 0) { stepIndex--; renderCurrentStep(); }
+    if (stepIndex > -1) { stepIndex--; renderCurrentStep(); }
   }
 
   /* ══════════════ 최종 제출 (게임활동_로그, 기본 제출 경로 — 별도 action 없음) ══════════════ */
@@ -484,7 +591,8 @@
   function buildReflection() {
     var lines = [];
     function push(label, val) { if (val) lines.push('[' + label + '] ' + val); }
-    push('시작 선택', ANSWERS.start_choice === 'criticize' ? '비판한다' : (ANSWERS.start_choice === 'endure' ? '참는다' : ''));
+    push('글쓰기① 선택', ANSWERS.write1_choice === 'criticize' ? '비판한다' : (ANSWERS.write1_choice === 'endure' ? '참는다' : ''));
+    push('글쓰기① 이유', ANSWERS.write1_text);
     push('조의제문 해석 1', ANSWERS.m_sourceA_q1);
     push('조의제문 해석 2', ANSWERS.m_sourceA_q2);
     push('해석 비교', ANSWERS.m_sourceB_compare);
@@ -537,13 +645,15 @@
 
   /* ══════════════ 초기화 ══════════════ */
   function init() {
+    // 포털에서 넘어온 값은 "임시로" 채워두기만 하고, 실제로 확정하는 건
+    // 로그인 확인 화면에서 학생이 "확인하고 시작하기"를 눌렀을 때다
+    // (webapp-builder 스킬: 자동 채움만 하고 확인 화면을 건너뛰지 않는다).
     SESSION.sid = getQueryParam('sid');
     SESSION.name = getQueryParam('name');
     SESSION.preview = getQueryParam('preview') === '1';
     var parsed = parseStudentId(SESSION.sid);
     if (parsed) { SESSION.grade = parsed.grade; SESSION.ban = parsed.ban; SESSION.number = parsed.number; }
 
-    loadAnswers();
     if (SESSION.preview) document.getElementById('devBanner').hidden = false;
 
     document.getElementById('navNext').addEventListener('click', goNext);
