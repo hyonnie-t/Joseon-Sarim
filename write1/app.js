@@ -15,6 +15,28 @@
  * 글쓰기 단계에서는 역할(3사 관리) 배지를 넣어 어떤 입장에서 쓰는 글인지
  * 먼저 보이게 했다.
  *
+ * v1.5(2026-09-28, 효니 피드백 "글쓰기 마음에 안 들어" 반영) — 2단계(카드
+ * 선택) 카드 목록을 시뮬 전체에서 쓰는 공용 .choice-btn(큼직한 전체 폭 버튼)
+ * 대신 전용 .pick-chip으로 바꿨다. 분류 단계에서 이미 사림=쪽빛(jade),
+ * 훈구=금빛(amber)으로 색을 나눠놨는데, 다음 단계에서 똑같은 카드를 무채색
+ * 큰 버튼으로 다시 늘어놓으면 "방금 분류한 결과"처럼 안 보이고 "카드를 또
+ * 처음부터 고르는 세 번째 분류 단계"처럼 보였다. .pick-chip은 더 작고
+ * 조밀하며 분류 단계와 같은 색을 그대로 쓴다. 라벨에 이모지(📜/🏛)도 붙여
+ * 어느 쪽 목록인지 한눈에 구분되게 했다. .choice-btn/.choice-list는
+ * 최상위 app.js(본 시뮬)의 다른 판단 화면에서 그대로 쓰고 있어 손대지 않음.
+ *
+ * v1.6(2026-09-28, 효니 피드백 "역할이 강조되지 않고, 카드 선택과 글쓰기 연결이
+ * 애매함" 반영) — 두 가지를 고쳤다.
+ * (1) 역할 안내를 작은 알약 배지(.role-badge)+회색 안내문(.lead) 조합에서
+ * 눈에 띄는 박스(.role-banner)로 바꿔 "지금 어떤 입장에서 쓰는 글인지"가
+ * 먼저 읽히게 했다.
+ * (2) 카드를 둘 다 고르기 전엔 쓰기 칸 자체를 아예 렌더링하지 않는다
+ * (writeHtml의 bothPicked 분기). 둘 다 고르면 방금 고른 카드 두 개의
+ * 문장을 그대로 다시 보여준 뒤(.pick-recap) 바로 그 아래 "위 두 카드를
+ * 근거로" 쓰기 칸이 열린다 — 선택과 글쓰기가 같은 화면에 나란히 있지만
+ * 서로 무관해 보이던 문제를, 순서를 강제하고 선택 내용을 눈앞에 다시
+ * 보여주는 방식으로 연결했다.
+ *
  * ../config.js를 그대로 불러 쓴다(SHEET_WEBAPP_URL, PADLET_BY_BAN 공유) —
  * 백엔드 URL이나 Padlet 링크가 바뀌면 한 곳(config.js)만 고치면 된다.
  * GAME_NAME만 이 페이지 전용으로 따로 둔다: 나중에 전체 시뮬이 열리면
@@ -275,23 +297,35 @@
     var sarimCards = cardsBySide('sarim');
     var hoonguCards = cardsBySide('hoongu');
     var text = ANSWERS.write1_text || '';
+    var bothPicked = !!ANSWERS.write1_sarim_card && !!ANSWERS.write1_hoongu_card;
     var html = '<div class="card">';
     html += '<h2>🖋️ 글쓰기 ① — 한 마디 쓰기</h2>';
-    html += '<span class="role-badge">' + escapeHtml(WRITE_ROLE) + '</span>';
-    html += '<p class="lead">' + escapeHtml(WRITE_INTRO) + '</p>';
-    html += '<label class="field-label">사림 카드 하나 선택</label>';
-    html += '<div class="choice-list">';
+    html += '<div class="role-banner">';
+    html += '<div class="role-banner-role">' + escapeHtml(WRITE_ROLE) + '</div>';
+    html += '<p class="role-banner-body">' + escapeHtml(WRITE_INTRO) + '</p>';
+    html += '</div>';
+    html += '<label class="field-label">📜 사림 카드 하나 선택</label>';
+    html += '<div class="pick-zone pick-zone-sarim">';
     sarimCards.forEach(function (c) {
-      html += '<button type="button" class="choice-btn' + (ANSWERS.write1_sarim_card === c.id ? ' selected' : '') + '" data-group="sarim" data-card="' + c.id + '">' + escapeHtml(c.text) + '</button>';
+      html += '<button type="button" class="pick-chip' + (ANSWERS.write1_sarim_card === c.id ? ' selected' : '') + '" data-group="sarim" data-card="' + c.id + '">' + escapeHtml(c.text) + '</button>';
     });
     html += '</div>';
-    html += '<label class="field-label">훈구 카드 하나 선택</label>';
-    html += '<div class="choice-list">';
+    html += '<label class="field-label">🏛 훈구 카드 하나 선택</label>';
+    html += '<div class="pick-zone pick-zone-hoongu">';
     hoonguCards.forEach(function (c) {
-      html += '<button type="button" class="choice-btn' + (ANSWERS.write1_hoongu_card === c.id ? ' selected' : '') + '" data-group="hoongu" data-card="' + c.id + '">' + escapeHtml(c.text) + '</button>';
+      html += '<button type="button" class="pick-chip' + (ANSWERS.write1_hoongu_card === c.id ? ' selected' : '') + '" data-group="hoongu" data-card="' + c.id + '">' + escapeHtml(c.text) + '</button>';
     });
     html += '</div>';
-    html += '<label class="field-label">한 마디</label>';
+    if (!bothPicked) {
+      html += '<p class="write-gate">👆 사림 카드 하나, 훈구 카드 하나를 다 고르면 쓰기 칸이 열려.</p>';
+      html += '</div>';
+      return html;
+    }
+    html += '<div class="pick-recap">';
+    html += '<div class="pick-recap-item pick-recap-sarim"><span class="pick-recap-tag">사림</span>' + escapeHtml(cardText(ANSWERS.write1_sarim_card)) + '</div>';
+    html += '<div class="pick-recap-item pick-recap-hoongu"><span class="pick-recap-tag">훈구</span>' + escapeHtml(cardText(ANSWERS.write1_hoongu_card)) + '</div>';
+    html += '</div>';
+    html += '<label class="field-label">✍️ 위 두 카드를 근거로, 훈구 대신들에게 한 마디</label>';
     html += '<textarea class="text-field" rows="4" id="write1Text" placeholder="' + escapeAttr(WRITE_PLACEHOLDER) + '">' + escapeHtml(text) + '</textarea>';
     html += '<button type="button" class="hint-toggle" data-target="write1Hint">💡 막막하면 힌트 보기</button>';
     html += '<div class="hint-box" id="write1Hint" hidden>' + escapeHtml(WRITING_HINT) + '</div>';
@@ -360,15 +394,20 @@
       });
       root.querySelector('#checkClassify').addEventListener('click', checkClassification);
     } else if (phase === 'write') {
-      var submitBtn = root.querySelector('#submitWrite1');
-      function refreshSubmitState() { submitBtn.disabled = !writeIsComplete(); }
-
-      root.querySelectorAll('.choice-btn').forEach(function (btn) {
+      // 카드를 둘 다 고르기 전엔 쓰기 영역(textarea/힌트/복사/제출) 자체를
+      // 렌더링하지 않는다 (writeHtml 참고) — "선택부터 끝내야 쓰기 칸이 열린다"는
+      // 순서를 화면 구조로 강제해서, 선택과 글쓰기가 이어진 하나의 흐름으로
+      // 보이게 한다. 그래서 아래 요소들도 있을 때만 이벤트를 건다.
+      root.querySelectorAll('.pick-chip').forEach(function (btn) {
         btn.addEventListener('click', function () {
           setAnswer('write1_' + btn.getAttribute('data-group') + '_card', btn.getAttribute('data-card'));
           render();
         });
       });
+      var submitBtn = root.querySelector('#submitWrite1');
+      if (!submitBtn) return;
+      function refreshSubmitState() { submitBtn.disabled = !writeIsComplete(); }
+
       var textEl = root.querySelector('#write1Text');
       textEl.addEventListener('input', function () {
         setAnswer('write1_text', textEl.value);
