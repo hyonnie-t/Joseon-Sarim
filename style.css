@@ -135,6 +135,20 @@ table.cmp-table th{background:#F0EDE3;}
 .choice-btn:active{transform:scale(.99);}
 .choice-btn.selected{border-color:var(--indigo); background:var(--indigo-bg); font-weight:600;}
 
+/* ── 카드 분류(글쓰기① 사림·훈구) ── */
+.classify-list{display:flex; flex-direction:column; gap:12px; margin-bottom:14px;}
+.classify-card{border:1.5px solid var(--line); border-radius:var(--radius-sm); padding:12px 14px;}
+.classify-text{font-size:1rem; margin-bottom:10px;}
+.classify-btns{display:flex; gap:8px;}
+.classify-btn{
+  flex:1; min-height:var(--tap-min); border-radius:var(--radius-sm); border:1.5px solid var(--line);
+  background:var(--card); font-size:.96rem; font-weight:600; cursor:pointer;
+  transition:border-color .15s, background .15s, color .15s;
+}
+.classify-btn:active{transform:scale(.98);}
+.classify-btn.selected-sarim{border-color:var(--indigo); background:var(--indigo-bg); color:var(--indigo-deep);}
+.classify-btn.selected-hoongu{border-color:var(--ochre); background:var(--amber-bg); color:var(--amber-text-deep);}
+
 /* ── 입력창 ── */
 .text-field{
   width:100%; min-height:var(--tap-min); padding:10px 12px; border:1.5px solid var(--line);

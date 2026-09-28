@@ -3,34 +3,62 @@
  * 떼어 먼저 배포하기 위한 독립 페이지. 본 시뮬(../index.html)이 아직
  * 준비 중이어도 이 화면만 먼저 학생에게 줄 수 있게 만든 것.
  *
+ * v1.2(2026-09-28, 효니 핸드오프 "핸드오프 문서 v1 — 사림 단원 글쓰기 ① 수정"
+ * 반영) — "비판할래/참을래 + 이유" 구조를 "카드 분류(사림·훈구) → 카드 두 장
+ * 골라 한 마디 쓰기" 구조로 교체. 근거는 핸드오프 문서 2장 참고(사림 쪽
+ * 시각을 사실처럼 전제하던 문구 제거, 참는 쪽 근거 없는 문제 해소).
+ *
  * ../config.js를 그대로 불러 쓴다(SHEET_WEBAPP_URL, PADLET_BY_BAN 공유) —
  * 백엔드 URL이나 Padlet 링크가 바뀌면 한 곳(config.js)만 고치면 된다.
  * GAME_NAME만 이 페이지 전용으로 따로 둔다: 나중에 전체 시뮬이 열리면
  * 그 안의 write1 스텝과는 다른 gameName으로 별도 행이 쌓인다 —
  * history26 커리큘럼에도 이 페이지를 별도 활동으로 등록해야 하고,
  * 그때 activity id를 아래 WRITE1_GAME_NAME과 맞출 것.
+ * ⚠️ 이미 포털 커리큘럼에 이 activity id로 등록돼 있을 수 있어 값 자체는
+ * 그대로 둔다(진행률·포인트 계산 연결이 끊기지 않도록) — 내용만 바뀐 것.
  *
- * localStorage 키/필드명은 전체 시뮬(../app.js)과 똑같이
- * "joseon_sarim_progress_<학번>" 안의 write1_choice/write1_text를 쓴다.
- * 같은 브라우저로 나중에 전체 시뮬을 열면 이 글쓰기① 답이 이미 채워진
- * 채로 시작한다(같은 origin이라 localStorage가 공유됨).
+ * localStorage 키는 전체 시뮬(../app.js)과 같은
+ * "joseon_sarim_progress_<학번>"을 쓴다. 다만 이번 개편으로 답변
+ * 필드 구조가 바뀌어(write1_choice/write1_text → 카드 분류·선택 카드·
+ * write1_text) 전체 시뮬 쪽의 옛 write1 스텝(../app.js, ../data.js)이
+ * 참조하던 write1_choice는 더 이상 이 페이지가 채우지 않는다. 이건
+ * 핸드오프 문서 6장 "열린 질문 1"에서 효니 결정 대기 중인 사항 —
+ * 글쓰기②/전체 시뮬은 이 커밋 범위 밖이라 건드리지 않는다.
  * ══════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
 
   var CONFIG = window.CONFIG;
   var WRITE1_GAME_NAME = '사화_글쓰기1_비판할래참을래';
+  var MIN_TEXT_LEN = 10; // 공란 방지 수준 최소 글자 수 (핸드오프 6장 — 교사가 바꿀 수 있게 상수로 분리)
 
-  var PROMPT = '너는 성종 때 3사 관리가 됐어. 훈구의 잘못이 눈에 보여. 비판할래, 참을래? 123쪽에서 근거 하나를 넣어서 이유를 써봐.';
-  var WRITING_HINT = '123쪽에서 훈구·사림에 대해 어떤 문장을 근거로 들 수 있을까?';
-  var OPTIONS = [
-    { id: 'criticize', label: '비판한다' },
-    { id: 'endure', label: '참는다' }
+  var CLASSIFY_INTRO = '아직 사화 이야기는 하나도 안 나와. 교과서 123쪽까지 읽은 걸로 해봐. 카드가 10장 있어. 사림 이야기면 사림 쪽으로, 훈구 이야기면 훈구 쪽으로 옮겨봐.';
+  var WRONG_MSG = '123쪽 본문을 다시 읽어봐.';
+  var WRITE_INTRO = '너는 성종 때 3사 관리야. 훈구 대신들에게 한 마디 해봐. 방금 분류한 카드에서 사림 카드 하나, 훈구 카드 하나를 골라서 넣어. 1~2문장이면 돼. (실제 기록이 아니라 네가 상상해서 쓰는 창작이야.)';
+  var WRITING_HINT = '내가 고른 훈구 카드는 사림이 보기에 뭐가 문제일까? 내가 고른 사림 카드는 그 문제와 어떻게 이어질까?';
+  var WRITE_PLACEHOLDER = '훈구 대신들에게 하고 싶은 말을 1~2문장으로';
+  var DONE_NOTE = '교과서가 정리한 구분이야. 사림과 훈구를 대립하는 두 집단으로 보는 설명 방식에는 학계의 다른 시각도 있어.';
+
+  // 카드 문구는 교과서 123쪽 서술 그대로 — 임의 수정 금지(핸드오프 문서 4장).
+  var CARDS = [
+    { id: 'c1', text: '고려 말 조선 건국에 참여하지 않고 지방에서 학문 연구와 교육에 힘씀', answer: 'sarim' },
+    { id: 'c2', text: '정몽주, 길재의 학통을 이음', answer: 'sarim' },
+    { id: 'c3', text: '도덕과 의리를 바탕으로 하는 왕도 정치와 향촌 자치를 추구', answer: 'sarim' },
+    { id: 'c4', text: '성종 때 김종직을 비롯한 영남 지역 출신이 많이 등용됨', answer: 'sarim' },
+    { id: 'c5', text: '주로 3사의 언관직에 임명되어 훈구 세력의 부정한 행위와 권력 독점을 비판함', answer: 'sarim' },
+    { id: 'c6', text: '조선 건국과 국왕 즉위에 앞장선 사대부가 공신이 됨', answer: 'hoongu' },
+    { id: 'c7', text: '세조가 왕위에 오르는 데 공을 세운 한명회 등이 고위 관직을 차지함', answer: 'hoongu' },
+    { id: 'c8', text: '그 공로로 국가로부터 많은 토지와 노비를 받음', answer: 'hoongu' },
+    { id: 'c9', text: '일부는 왕실과 혼인 관계를 맺어 세력 기반을 다짐', answer: 'hoongu' },
+    { id: 'c10', text: '대를 이어 권력을 독점하면서 왕권을 제약함', answer: 'hoongu' }
   ];
-
   var SESSION = { sid: '', name: '', ban: null, preview: false };
   var ANSWERS = {};
-  var phase = 'login'; // login | write | done
+  var CLASSIFY = {}; // cardId -> 'sarim' | 'hoongu'
+  var CARD_ORDER = []; // 카드 표시 순서(세션마다 무작위로 섞음)
+  var wrongIds = []; // 마지막 확인 결과 틀린 카드 id 목록
+  var checkedOnce = false; // '확인하기'를 한 번이라도 눌렀는지
+  var phase = 'login'; // login | classify | write | done
   var submitState = 'idle'; // idle | saving | done | failed
 
   function parseStudentId(sid) {
@@ -95,16 +123,40 @@
     } catch (e) { return false; }
   }
 
+  function shuffledIds() {
+    var ids = CARDS.map(function (c) { return c.id; });
+    for (var i = ids.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = ids[i]; ids[i] = ids[j]; ids[j] = tmp;
+    }
+    return ids;
+  }
+
+  function cardById(id) {
+    for (var i = 0; i < CARDS.length; i++) { if (CARDS[i].id === id) return CARDS[i]; }
+    return null;
+  }
+  function cardText(id) {
+    var c = cardById(id);
+    return c ? c.text : '';
+  }
+  function cardsBySide(side) { return CARDS.filter(function (c) { return c.answer === side; }); }
+
   function loginIsComplete() {
     return !!parseStudentId(SESSION.sid) && SESSION.name.trim().length > 0;
   }
-  function writeIsComplete() {
-    return !!ANSWERS.write1_choice && (ANSWERS.write1_text || '').trim().length > 0;
+
+  function allClassified(ids) {
+    return ids.every(function (id) { return !!CLASSIFY[id]; });
+  }
+  function cardsToShow() {
+    if (!checkedOnce) return CARD_ORDER;
+    return CARD_ORDER.filter(function (id) { return wrongIds.indexOf(id) !== -1; });
   }
 
-  function labelFor(id) {
-    var found = OPTIONS.filter(function (o) { return o.id === id; })[0];
-    return found ? found.label : id;
+  function writeIsComplete() {
+    return !!ANSWERS.write1_sarim_card && !!ANSWERS.write1_hoongu_card &&
+      (ANSWERS.write1_text || '').trim().length >= MIN_TEXT_LEN;
   }
 
   function padletLinkHtml(label) {
@@ -118,6 +170,7 @@
   function render() {
     var root = document.getElementById('stepArea');
     if (phase === 'login') root.innerHTML = loginHtml();
+    else if (phase === 'classify') root.innerHTML = classifyHtml();
     else if (phase === 'write') root.innerHTML = writeHtml();
     else root.innerHTML = doneHtml();
 
@@ -138,20 +191,52 @@
     return html;
   }
 
-  function writeHtml() {
-    var chosen = ANSWERS.write1_choice;
-    var text = ANSWERS.write1_text || '';
+  function classifyHtml() {
+    var ids = cardsToShow();
     var html = '<div class="card">';
-    html += '<h2>글쓰기 ① — 먼저 써보자</h2>';
-    html += '<p class="lead">아직 사화 이야기는 하나도 안 나와. 지금 아는 것만 가지고 판단해봐.</p>';
-    html += '<p style="margin-bottom:14px; font-weight:600;">' + escapeHtml(PROMPT) + '</p>';
-    html += '<div class="choice-list">';
-    OPTIONS.forEach(function (opt) {
-      html += '<button type="button" class="choice-btn' + (chosen === opt.id ? ' selected' : '') + '" data-choice="' + opt.id + '">' + escapeHtml(opt.label) + '</button>';
+    html += '<h2>카드 분류 — 사림일까, 훈구일까?</h2>';
+    html += '<p class="lead">' + escapeHtml(CLASSIFY_INTRO) + '</p>';
+    if (checkedOnce && ids.length > 0) {
+      html += '<div class="note-box">' + escapeHtml(WRONG_MSG) + '</div>';
+    }
+    html += '<div class="classify-list">';
+    ids.forEach(function (id) {
+      var card = cardById(id);
+      var picked = CLASSIFY[id];
+      html += '<div class="classify-card" data-card-row="' + id + '">';
+      html += '<p class="classify-text">' + escapeHtml(card.text) + '</p>';
+      html += '<div class="classify-btns">';
+      html += '<button type="button" class="classify-btn' + (picked === 'sarim' ? ' selected-sarim' : '') + '" data-card="' + id + '" data-side="sarim">사림</button>';
+      html += '<button type="button" class="classify-btn' + (picked === 'hoongu' ? ' selected-hoongu' : '') + '" data-card="' + id + '" data-side="hoongu">훈구</button>';
+      html += '</div></div>';
     });
     html += '</div>';
-    html += '<label class="field-label">이유를 적어줘 (교과서 123쪽 근거 하나 포함)</label>';
-    html += '<textarea class="text-field" rows="4" id="write1Text">' + escapeHtml(text) + '</textarea>';
+    html += '<div class="nav-row"><button type="button" class="nav-btn next" id="checkClassify"' + (allClassified(ids) ? '' : ' disabled') + '>확인하기</button></div>';
+    html += '</div>';
+    return html;
+  }
+
+  function writeHtml() {
+    var sarimCards = cardsBySide('sarim');
+    var hoonguCards = cardsBySide('hoongu');
+    var text = ANSWERS.write1_text || '';
+    var html = '<div class="card">';
+    html += '<h2>글쓰기 ① — 한 마디 쓰기</h2>';
+    html += '<p class="lead">' + escapeHtml(WRITE_INTRO) + '</p>';
+    html += '<label class="field-label">사림 카드 하나 선택</label>';
+    html += '<div class="choice-list" data-group="sarim">';
+    sarimCards.forEach(function (c) {
+      html += '<button type="button" class="choice-btn' + (ANSWERS.write1_sarim_card === c.id ? ' selected' : '') + '" data-group="sarim" data-card="' + c.id + '">' + escapeHtml(c.text) + '</button>';
+    });
+    html += '</div>';
+    html += '<label class="field-label">훈구 카드 하나 선택</label>';
+    html += '<div class="choice-list" data-group="hoongu">';
+    hoonguCards.forEach(function (c) {
+      html += '<button type="button" class="choice-btn' + (ANSWERS.write1_hoongu_card === c.id ? ' selected' : '') + '" data-group="hoongu" data-card="' + c.id + '">' + escapeHtml(c.text) + '</button>';
+    });
+    html += '</div>';
+    html += '<label class="field-label">한 마디</label>';
+    html += '<textarea class="text-field" rows="4" id="write1Text" placeholder="' + escapeAttr(WRITE_PLACEHOLDER) + '">' + escapeHtml(text) + '</textarea>';
     html += '<button type="button" class="hint-toggle" data-target="write1Hint">💡 막막하면 힌트 보기</button>';
     html += '<div class="hint-box" id="write1Hint" hidden>' + escapeHtml(WRITING_HINT) + '</div>';
     html += '<div class="padlet-box" style="margin-top:16px;">';
@@ -167,11 +252,11 @@
   }
 
   function doneHtml() {
-    var choiceLabel = labelFor(ANSWERS.write1_choice);
     var html = '<div class="card">';
     html += '<h2>제출됐어</h2>';
-    html += '<div class="recap-item"><h3>네 선택과 이유</h3>';
-    html += '<div class="recap-value">' + escapeHtml(choiceLabel) + '<br>' + escapeHtml(ANSWERS.write1_text || '') + '</div></div>';
+    html += '<div class="recap-item"><h3>네가 고른 카드와 한 마디</h3>';
+    html += '<div class="recap-value">사림 카드: ' + escapeHtml(cardText(ANSWERS.write1_sarim_card)) + '<br>훈구 카드: ' + escapeHtml(cardText(ANSWERS.write1_hoongu_card)) + '<br>' + escapeHtml(ANSWERS.write1_text || '') + '</div></div>';
+    html += '<div class="note-box">' + escapeHtml(DONE_NOTE) + '</div>';
     html += '<div class="note-box">Padlet에도 붙여넣었는지 한 번 더 확인해줘. 이후 무오·기묘사화 시뮬레이션은 선생님이 안내할 때 이어서 진행하면 돼.</div>';
     html += '<p id="submitStatus2" style="margin-top:10px; font-size:.86rem; color:var(--ink-soft);"></p>';
     html += '</div>';
@@ -196,17 +281,57 @@
       nextBtn.addEventListener('click', function () {
         if (!loginIsComplete()) return;
         loadAnswers();
-        phase = 'write';
+        enterPostLoginPhase();
+        render();
+      });
+    } else if (phase === 'classify') {
+      var checkBtn = root.querySelector('#checkClassify');
+
+      root.querySelectorAll('.classify-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var id = btn.getAttribute('data-card');
+          var side = btn.getAttribute('data-side');
+          CLASSIFY[id] = side;
+          setAnswer('write1_classification', CLASSIFY);
+
+          var row = root.querySelector('.classify-card[data-card-row="' + id + '"]');
+          row.querySelectorAll('.classify-btn').forEach(function (b) {
+            b.classList.remove('selected-sarim', 'selected-hoongu');
+          });
+          btn.classList.add(side === 'sarim' ? 'selected-sarim' : 'selected-hoongu');
+
+          checkBtn.disabled = !allClassified(cardsToShow());
+        });
+      });
+
+      checkBtn.addEventListener('click', function () {
+        var visible = cardsToShow();
+        ANSWERS.write1_attempts = (ANSWERS.write1_attempts || 0) + 1;
+        setAnswer('write1_attempts', ANSWERS.write1_attempts);
+
+        var newWrong = visible.filter(function (id) {
+          var card = cardById(id);
+          return CLASSIFY[id] !== card.answer;
+        });
+        checkedOnce = true;
+        wrongIds = newWrong;
+
+        if (wrongIds.length === 0) {
+          phase = 'write';
+        }
         render();
       });
     } else if (phase === 'write') {
-      var submitBtn = root.querySelector('#submitWrite1');
-      function refreshSubmitState() { submitBtn.disabled = !writeIsComplete(); }
-
       root.querySelectorAll('.choice-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
-          setAnswer('write1_choice', btn.getAttribute('data-choice'));
-          render();
+          var group = btn.getAttribute('data-group');
+          var cardId = btn.getAttribute('data-card');
+          setAnswer('write1_' + group + '_card', cardId);
+          root.querySelectorAll('.choice-btn[data-group="' + group + '"]').forEach(function (b) {
+            b.classList.remove('selected');
+          });
+          btn.classList.add('selected');
+          refreshSubmitState();
         });
       });
       var textEl = root.querySelector('#write1Text');
@@ -219,13 +344,20 @@
         box.hidden = !box.hidden;
       });
       root.querySelector('#copyWrite1').addEventListener('click', function () {
-        var payload = '[글쓰기①] ' + labelFor(ANSWERS.write1_choice) + '\n' + (ANSWERS.write1_text || '');
+        var payload = '사림 카드: ' + cardText(ANSWERS.write1_sarim_card) + '\n' +
+          '훈구 카드: ' + cardText(ANSWERS.write1_hoongu_card) + '\n' +
+          '한 마디: ' + (ANSWERS.write1_text || '');
         copyToClipboard(payload).then(function (ok) {
           document.getElementById('copyStatus').textContent = ok ? '복사됐어. Padlet에 붙여넣어줘.' : '복사에 실패했어. 직접 옮겨 적어줘.';
         });
       });
-      submitBtn.addEventListener('click', submitFinal);
+      root.querySelector('#submitWrite1').addEventListener('click', submitFinal);
       refreshSubmitState();
+
+      function refreshSubmitState() {
+        var btn = root.querySelector('#submitWrite1');
+        if (btn) btn.disabled = !writeIsComplete();
+      }
     }
   }
 
@@ -239,10 +371,16 @@
       studentId: SESSION.sid,
       studentName: SESSION.name,
       gameName: WRITE1_GAME_NAME,
-      choiceSummary: labelFor(ANSWERS.write1_choice),
+      choiceSummary: '사림:' + cardText(ANSWERS.write1_sarim_card) + ' / 훈구:' + cardText(ANSWERS.write1_hoongu_card),
       diffSummary: '',
       reflection: ANSWERS.write1_text || '',
-      choicesJson: JSON.stringify({ write1_choice: ANSWERS.write1_choice, write1_text: ANSWERS.write1_text })
+      choicesJson: JSON.stringify({
+        classification: CLASSIFY,
+        attempts: ANSWERS.write1_attempts || 1,
+        sarim_card: ANSWERS.write1_sarim_card,
+        hoongu_card: ANSWERS.write1_hoongu_card,
+        write1_text: ANSWERS.write1_text
+      })
     };
     fetchJsonRetry(CONFIG.SHEET_WEBAPP_URL, {
       method: 'POST',
@@ -260,12 +398,28 @@
     });
   }
 
+  // 로그인 확인 직후 이어서 보여줄 단계를 저장된 답변 기준으로 정한다.
+  function enterPostLoginPhase() {
+    CLASSIFY = ANSWERS.write1_classification || {};
+    var allCorrect = CARDS.length > 0 && CARDS.every(function (c) { return CLASSIFY[c.id] === c.answer; });
+    if (allCorrect) {
+      checkedOnce = true;
+      wrongIds = [];
+      phase = 'write';
+    } else {
+      checkedOnce = (ANSWERS.write1_attempts || 0) > 0;
+      wrongIds = checkedOnce ? CARDS.filter(function (c) { return CLASSIFY[c.id] !== c.answer; }).map(function (c) { return c.id; }) : [];
+      phase = 'classify';
+    }
+  }
+
   function init() {
     SESSION.sid = getQueryParam('sid');
     SESSION.name = getQueryParam('name');
     SESSION.preview = getQueryParam('preview') === '1';
     var parsed = parseStudentId(SESSION.sid);
     SESSION.ban = parsed ? parsed.ban : null;
+    CARD_ORDER = shuffledIds();
 
     if (SESSION.preview) document.getElementById('devBanner').hidden = false;
 
