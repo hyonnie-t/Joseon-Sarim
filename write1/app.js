@@ -46,6 +46,22 @@
  * write1_sarim_card/write1_hoongu_card 답안 필드, 관련 UI·제출 데이터
  * (choiceSummary, choicesJson의 sarim_card/hoongu_card)는 모두 제거.
  *
+ * v1.8(2026-09-28, 효니 요청 "사림이 말하듯이, 카카오톡 상소 보내기 같은 거"
+ * 반영) — 글쓰기 화면을 채팅 장면으로 바꿨다. ../app.js(본 시뮬)가 이미 쓰는
+ * 검증된 카카오톡식 말풍선 패턴(.chat-wrap/.chat-line/.avatar/.bubble, 사료
+ * 대화 연출용으로 webapp-builder 스킬에 명시된 방식)을 그대로 재사용했다.
+ * 성종의 대사는 교과서 122쪽 도입 만화의 실제 대사("3사 관원이 되었으니
+ * 바른말을 해야 정치의 균형을 맞출 수 있을 것이다")를 그대로 썼다.
+ *
+ * ⚠️ 수신자를 "훈구 대신들"에서 "성종"으로 바로잡았다 — 3사(사헌부·사간원·
+ * 홍문관)는 언관직으로, 임금에게 간언(아뢰는 것)하는 자리이지 훈구파에게
+ * 직접 말을 거는 자리가 아니다(교과서 123쪽 서술 근거). v1.2~v1.7까지 계속
+ * "훈구 대신들에게 한 마디"로 돼 있던 걸 이번에 고쳤다.
+ *
+ * 아바타는 <img src="king.png">를 먼저 시도하고, 파일이 없으면 onerror로
+ * 이니셜("성")로 자동 대체된다 — 효니가 제미나이로 만든 이미지를
+ * write1/king.png로 저장해서 커밋하면 코드 수정 없이 바로 반영된다.
+ *
  * ../config.js를 그대로 불러 쓴다(SHEET_WEBAPP_URL, PADLET_BY_BAN 공유) —
  * 백엔드 URL이나 Padlet 링크가 바뀌면 한 곳(config.js)만 고치면 된다.
  * GAME_NAME만 이 페이지 전용으로 따로 둔다: 나중에 전체 시뮬이 열리면
@@ -67,10 +83,15 @@
 
   var CLASSIFY_INTRO = '교과서 123쪽까지 읽은 걸로 해봐. 카드 10장을 읽고 사림 상자·훈구 상자에 나눠 담아봐.';
   var WRONG_MSG = '123쪽 본문을 다시 읽어봐.';
-  var WRITE_ROLE = '🎭 너는 성종 때 3사에서 일하는 관리야';
-  var WRITE_INTRO = '3사는 훈구의 부정과 권력 독점을 비판하는 자리야. 그 입장이 돼서, 방금 분류한 카드에서 사림 카드 하나·훈구 카드 하나를 골라 훈구 대신들에게 한 마디 해봐. 1~2문장이면 돼. (실제 기록이 아니라 네가 상상해서 쓰는 창작이야.)';
-  var WRITING_HINT = '내가 고른 훈구 카드는 사림이 보기에 뭐가 문제일까? 내가 고른 사림 카드는 그 문제와 어떻게 이어질까?';
-  var WRITE_PLACEHOLDER = '훈구 대신들에게 하고 싶은 말을 1~2문장으로';
+  // 왕에게 하는 말 — 3사(사헌부·사간원·홍문관)는 "언관직"으로, 훈구파에게 직접
+  // 말을 거는 자리가 아니라 임금에게 아뢰는(간언·상소) 자리다(교과서 123쪽:
+  // "3사의 언관직에 임명되어 훈구 세력의 부정한 행위와 권력 독점을 비판").
+  // 그래서 수신자를 "훈구 대신들"이 아니라 "성종"으로 바로잡았다(v1.8).
+  var CHAT_NARRATION = '성종, 새로 등용한 3사 관리를 부르다';
+  var CHAT_KING_LINE = '3사 관원이 되었으니 바른말을 해야 정치의 균형을 맞출 수 있을 것이다.'; // 교과서 122쪽 만화 대사
+  var WRITE_INTRO = '너는 방금 3사 관리가 된 사림이야. 성종 앞에서, 방금 분류한 카드를 참고해 훈구 세력의 문제를 아뢰어 봐. 1~2문장이면 돼. (실제 기록이 아니라 네가 상상해서 쓰는 창작이야.)';
+  var WRITING_HINT = '위 참고 카드에서 훈구가 어떤 문제를 일으켰는지, 사림이 그걸 어떻게 보는지 다시 읽어봐도 좋아.';
+  var WRITE_PLACEHOLDER = '전하께 아뢸 말을 1~2문장으로';
   var DONE_NOTE = '교과서가 정리한 구분이야. 사림과 훈구를 대립하는 두 집단으로 보는 설명 방식에는 학계의 다른 시각도 있어.';
 
   // 카드 문구는 교과서 123쪽 서술 그대로 — 임의 수정 금지(핸드오프 문서 4장).
@@ -306,11 +327,19 @@
     var hoonguCards = cardsBySide('hoongu');
     var text = ANSWERS.write1_text || '';
     var html = '<div class="card">';
-    html += '<h2>🖋️ 글쓰기 ① — 한 마디 쓰기</h2>';
-    html += '<div class="role-banner">';
-    html += '<div class="role-banner-role">' + escapeHtml(WRITE_ROLE) + '</div>';
-    html += '<p class="role-banner-body">' + escapeHtml(WRITE_INTRO) + '</p>';
+    html += '<h2>🖋️ 글쓰기 ① — 상소 올리기</h2>';
+    // 카카오톡식 말풍선 채팅(.chat-wrap/.chat-line/.avatar/.bubble)은 ../app.js
+    // (본 시뮬)가 이미 쓰는 검증된 패턴 — 같은 클래스를 그대로 재사용한다.
+    // 왕(성종) 아바타 자리에 이미지를 넣고 싶으면 write1/king.png 파일을
+    // 추가해줘. 파일이 있으면 자동으로 보이고, 없으면 지금처럼 이니셜로 보여.
+    html += '<div class="chat-wrap">';
+    html += '<div class="chat-narration">' + escapeHtml(CHAT_NARRATION) + '</div>';
+    html += '<div class="chat-line royal">';
+    html += '<div class="avatar royal"><img src="king.png" alt="" onerror="this.parentNode.textContent=\'성\';"></div>';
+    html += '<div class="chat-body"><div class="who">성종</div><div class="bubble">' + escapeHtml(CHAT_KING_LINE) + '</div></div>';
     html += '</div>';
+    html += '</div>';
+    html += '<p class="lead">' + escapeHtml(WRITE_INTRO) + '</p>';
     html += '<p class="ref-caption">📖 참고 — 방금 분류한 카드야. 눌러도 아무 반응 없어, 읽기용이야.</p>';
     html += '<div class="ref-cards">';
     html += '<div class="ref-col ref-col-sarim"><div class="ref-col-head">📜 사림</div>';
@@ -320,8 +349,10 @@
     hoonguCards.forEach(function (c) { html += '<div class="ref-item">' + escapeHtml(c.text) + '</div>'; });
     html += '</div>';
     html += '</div>';
-    html += '<label class="field-label">✍️ 훈구 대신들에게 한 마디</label>';
-    html += '<textarea class="text-field" rows="4" id="write1Text" placeholder="' + escapeAttr(WRITE_PLACEHOLDER) + '">' + escapeHtml(text) + '</textarea>';
+    html += '<label class="field-label">✍️ 전하께 아뢸 말</label>';
+    html += '<div class="compose-row">';
+    html += '<textarea class="text-field compose-input" rows="2" id="write1Text" placeholder="' + escapeAttr(WRITE_PLACEHOLDER) + '">' + escapeHtml(text) + '</textarea>';
+    html += '</div>';
     html += '<button type="button" class="hint-toggle" data-target="write1Hint">💡 막막하면 힌트 보기</button>';
     html += '<div class="hint-box" id="write1Hint" hidden>' + escapeHtml(WRITING_HINT) + '</div>';
     html += '<div class="padlet-box" style="margin-top:16px;">';
@@ -338,9 +369,18 @@
 
   function doneHtml() {
     var html = '<div class="card">';
-    html += '<h2>✅ 제출됐어</h2>';
-    html += '<div class="recap-item"><h3>네가 쓴 한 마디</h3>';
-    html += '<div class="recap-value">' + escapeHtml(ANSWERS.write1_text || '') + '</div></div>';
+    html += '<h2>✅ 상소를 올렸어</h2>';
+    html += '<div class="chat-wrap">';
+    html += '<div class="chat-narration">' + escapeHtml(CHAT_NARRATION) + '</div>';
+    html += '<div class="chat-line royal">';
+    html += '<div class="avatar royal"><img src="king.png" alt="" onerror="this.parentNode.textContent=\'성\';"></div>';
+    html += '<div class="chat-body"><div class="who">성종</div><div class="bubble">' + escapeHtml(CHAT_KING_LINE) + '</div></div>';
+    html += '</div>';
+    html += '<div class="chat-line">';
+    html += '<div class="avatar">나</div>';
+    html += '<div class="chat-body"><div class="who">나 (사림 관리)</div><div class="bubble">' + escapeHtml(ANSWERS.write1_text || '') + '</div></div>';
+    html += '</div>';
+    html += '</div>';
     html += '<div class="note-box">' + escapeHtml(DONE_NOTE) + '</div>';
     html += '<div class="note-box">Padlet에도 붙여넣었는지 한 번 더 확인해줘. 이후 무오·기묘사화 시뮬레이션은 선생님이 안내할 때 이어서 진행하면 돼.</div>';
     html += '<p id="submitStatus2" style="margin-top:10px; font-size:.86rem; color:var(--ink-soft);"></p>';
