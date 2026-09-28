@@ -30,11 +30,6 @@
   var stepIndex = -1; // -1 = 로그인 확인 화면, 0..N-1 = CONTENT.steps
   var submitState = 'idle'; // idle | saving | done | failed
 
-  /* 지금 화면에 걸려 있는 사료 카드를 key로 찾기 위한 임시 맵 — 사료 모달을
-   * 여는 버튼을 누르면 여기서 카드 데이터를 꺼내온다. renderSahwaStage가
-   * 매번 다시 채운다. */
-  var CURRENT_SOURCE_CARDS = {};
-
   /* ── 글쓰기① 전용 상태(v1.2, v1.4) — 카드 분류 단계는 ANSWERS에 바로 반영되지
    * 않는 "몇 번 틀렸는지" 같은 화면 표시용 상태가 필요해서 write1/app.js(독립
    * 페이지)와 같은 방식으로 모듈 변수로 따로 둔다. WRITE1_CLASSIFY는 "담지 않은
@@ -378,12 +373,21 @@
 
   /* ══════════════ 사료 돋보기 모달 ══════════════
    * 스테이지 화면의 "🔍 사료 돋보기" 버튼이 여는 팝업. 모달 DOM 자체는
-   * index.html에 한 번만 있고(#stepArea 밖), 여기서 내용만 채워 넣는다. */
-  function openSourceModal(card) {
+   * index.html에 한 번만 있고(#stepArea 밖), 여기서 내용만 채워 넣는다.
+   *
+   * v3.1(2026-09-28, 효니 지시): 사료 카드가 여러 장(A: 원문 → B: 해석 등)일
+   * 때, 예전처럼 버튼을 카드별로 따로 두고 학생이 어느 걸 먼저 볼지 마음대로
+   * 고르게 두지 않는다. 버튼 하나로 A부터 열고, 모달 안의 "다음 카드 보기"
+   * 버튼으로 순서대로 넘어가게 해서 "원문 → 해석" 순서를 강제한다(원문을
+   * 안 보고 해석부터 보는 걸 막음 — 사료·해석 분리 원칙을 카드 순서로 구현). */
+  function openSourceModal(cards, index) {
     var modal = document.getElementById('sourceModal');
     var titleEl = document.getElementById('modalTitle');
     var bodyEl = document.getElementById('modalBody');
     if (!modal || !titleEl || !bodyEl) return;
+    var card = cards[index];
+    if (!card) return;
+
     titleEl.textContent = card.title;
     var bodyHtml = '<p class="lead">' + escapeHtml(card.lead) + '</p>';
     if (card.text) {
@@ -400,14 +404,23 @@
       });
       bodyHtml += '</tbody></table>';
     }
+    if (index < cards.length - 1) {
+      bodyHtml += '<button type="button" class="modal-next-btn" id="modalNextCard">다음 — ' + escapeHtml(cards[index + 1].title) + ' 보기 →</button>';
+    }
+
     bodyEl.innerHTML = bodyHtml;
     modal.hidden = false;
+
     var fullToggle = document.getElementById('modalFullToggle');
     if (fullToggle) {
       fullToggle.addEventListener('click', function () {
         var box = document.getElementById('modalFullText');
         if (box) box.hidden = !box.hidden;
       });
+    }
+    var nextBtn = document.getElementById('modalNextCard');
+    if (nextBtn) {
+      nextBtn.addEventListener('click', function () { openSourceModal(cards, index + 1); });
     }
   }
 
@@ -418,9 +431,6 @@
 
   /* ══════════════ 사화 스테이지 (배경 + 사료 돋보기 + 판단 + 결과) ══════════════ */
   function renderSahwaStage(step) {
-    CURRENT_SOURCE_CARDS = {};
-    (step.sourceCards || []).forEach(function (c) { CURRENT_SOURCE_CARDS[c.key] = c; });
-
     var chosenKey = step.id + '_choice';
     var reasonKey = step.id + '_reason';
     var chosen = ANSWERS[chosenKey];
@@ -472,9 +482,7 @@
 
     if (step.sourceCards && step.sourceCards.length) {
       html += '<div class="source-btn-row">';
-      step.sourceCards.forEach(function (c) {
-        html += '<button type="button" class="source-btn" data-source="' + c.key + '">🔍 ' + escapeHtml(c.title) + '</button>';
-      });
+      html += '<button type="button" class="source-btn" data-open-sources="1">' + escapeHtml(step.sourceButtonLabel || ('🔍 ' + step.sourceCards[0].title)) + '</button>';
       html += '</div>';
     }
 
@@ -512,12 +520,10 @@
           });
         });
         bindTextFieldsAndHints(root);
-        root.querySelectorAll('.source-btn').forEach(function (btn) {
-          btn.addEventListener('click', function () {
-            var card = CURRENT_SOURCE_CARDS[btn.getAttribute('data-source')];
-            if (card) openSourceModal(card);
-          });
-        });
+        var sourceBtn = root.querySelector('[data-open-sources]');
+        if (sourceBtn && step.sourceCards && step.sourceCards.length) {
+          sourceBtn.addEventListener('click', function () { openSourceModal(step.sourceCards, 0); });
+        }
       }
     };
   }

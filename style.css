@@ -127,6 +127,11 @@ table.cmp-table th{background:#F0EDE3;}
   margin-top:4px; font-size:.9rem; background:none; border:none; color:var(--indigo);
   text-decoration:underline; cursor:pointer; padding:4px 0; min-height:var(--tap-min); text-align:left;
 }
+.modal-next-btn{
+  display:block; width:100%; margin-top:14px; min-height:var(--tap-min); padding:10px 16px;
+  border-radius:999px; border:none; background:var(--indigo); color:#fff; font-size:.95rem;
+  font-weight:700; cursor:pointer;
+}
 
 /* ── 사료 돋보기 모달 ── */
 .modal-backdrop{
