@@ -62,6 +62,12 @@
  * 이니셜("성")로 자동 대체된다 — 효니가 제미나이로 만든 이미지를
  * write1/king.png로 저장해서 커밋하면 코드 수정 없이 바로 반영된다.
  *
+ * v1.9(2026-09-28, 효니 피드백 두 가지 반영) — (1) "이미지가 성종 프사면
+ * 굳이 안 넣어도 될 거 같아"에 따라 king.png 시도/onerror 대체 로직을 빼고
+ * 아바타는 처음부터 이니셜("성")만 쓴다. (2) 카드 참고 목록 위 설명 문구
+ * ("눌러도 아무 반응 없어, 읽기용이야")가 "너무 AI스럽다"는 피드백으로
+ * 삭제 — 목록만 조용히 보여준다.
+ *
  * ../config.js를 그대로 불러 쓴다(SHEET_WEBAPP_URL, PADLET_BY_BAN 공유) —
  * 백엔드 URL이나 Padlet 링크가 바뀌면 한 곳(config.js)만 고치면 된다.
  * GAME_NAME만 이 페이지 전용으로 따로 둔다: 나중에 전체 시뮬이 열리면
@@ -330,17 +336,14 @@
     html += '<h2>🖋️ 글쓰기 ① — 상소 올리기</h2>';
     // 카카오톡식 말풍선 채팅(.chat-wrap/.chat-line/.avatar/.bubble)은 ../app.js
     // (본 시뮬)가 이미 쓰는 검증된 패턴 — 같은 클래스를 그대로 재사용한다.
-    // 왕(성종) 아바타 자리에 이미지를 넣고 싶으면 write1/king.png 파일을
-    // 추가해줘. 파일이 있으면 자동으로 보이고, 없으면 지금처럼 이니셜로 보여.
     html += '<div class="chat-wrap">';
     html += '<div class="chat-narration">' + escapeHtml(CHAT_NARRATION) + '</div>';
     html += '<div class="chat-line royal">';
-    html += '<div class="avatar royal"><img src="king.png" alt="" onerror="this.parentNode.textContent=\'성\';"></div>';
+    html += '<div class="avatar royal">성</div>';
     html += '<div class="chat-body"><div class="who">성종</div><div class="bubble">' + escapeHtml(CHAT_KING_LINE) + '</div></div>';
     html += '</div>';
     html += '</div>';
     html += '<p class="lead">' + escapeHtml(WRITE_INTRO) + '</p>';
-    html += '<p class="ref-caption">📖 참고 — 방금 분류한 카드야. 눌러도 아무 반응 없어, 읽기용이야.</p>';
     html += '<div class="ref-cards">';
     html += '<div class="ref-col ref-col-sarim"><div class="ref-col-head">📜 사림</div>';
     sarimCards.forEach(function (c) { html += '<div class="ref-item">' + escapeHtml(c.text) + '</div>'; });
@@ -373,7 +376,7 @@
     html += '<div class="chat-wrap">';
     html += '<div class="chat-narration">' + escapeHtml(CHAT_NARRATION) + '</div>';
     html += '<div class="chat-line royal">';
-    html += '<div class="avatar royal"><img src="king.png" alt="" onerror="this.parentNode.textContent=\'성\';"></div>';
+    html += '<div class="avatar royal">성</div>';
     html += '<div class="chat-body"><div class="who">성종</div><div class="bubble">' + escapeHtml(CHAT_KING_LINE) + '</div></div>';
     html += '</div>';
     html += '<div class="chat-line">';
