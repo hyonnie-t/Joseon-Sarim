@@ -10,6 +10,13 @@
  * 회고 화면에 서논술형 글쓰기 조합기를 더했다. 글쓰기①(write1) 관련
  * 함수·마크업은 이번에도 손대지 않았다 — write1/app.js(독립 배포 페이지)와
  * localStorage를 공유하기 때문(README 참고).
+ *
+ * v3.0(2026-09-28, 핸드오프 문서 v1 반영):
+ * "내 선택으로 자동 완성" 버튼(essayAutoFillText)을 완전히 제거했다 — 학생이
+ * 고른 선택지·이유를 그대로 이어붙여 서논술문 4단 전체를 채워주던 기능이
+ * design-principles.md 위반으로 공식 확정됐기 때문. 판단 발문을 스텝마다
+ * data.js의 judgment.heading으로 변주하고, 전환 카드(t1/t2)에도 role
+ * 프레이밍을 추가하고, 기묘사화 대화에 화자별 아바타 색상을 추가했다.
  * ══════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -432,14 +439,31 @@
       html += '<h3>' + escapeHtml(step.chat.title) + '</h3>';
       html += '<p class="lead">' + escapeHtml(step.chat.lead) + '</p>';
       html += '<div class="chat-wrap">';
+      // 화자별 색상 구분(핸드오프 3번) — 왕은 항상 .royal(금빛), 그 외 화자는
+      // 처음 등장한 순서대로 팔레트를 하나씩 배정한다(현재 화면 렌더링에서만
+      // 쓰는 임시 상태라 모듈 변수로 안 두고 클로저로 둔다). write1이 공유하는
+      // 기본 .avatar/.avatar.royal 규칙은 그대로 두고, 보조 클래스만 얹는다.
+      var speakerPalette = ['', 'speaker-b', 'speaker-c'];
+      var speakerAssigned = {};
+      var nextPaletteIdx = 0;
       step.chat.lines.forEach(function (l) {
         if (l.narration) {
           html += '<div class="chat-narration">' + escapeHtml(l.text) + '</div>';
           return;
         }
         var isRoyal = l.speaker === '중종' || l.speaker === '왕';
+        var extraClass = '';
+        if (isRoyal) {
+          extraClass = ' royal';
+        } else {
+          if (!(l.speaker in speakerAssigned)) {
+            speakerAssigned[l.speaker] = speakerPalette[Math.min(nextPaletteIdx, speakerPalette.length - 1)];
+            nextPaletteIdx++;
+          }
+          if (speakerAssigned[l.speaker]) extraClass = ' ' + speakerAssigned[l.speaker];
+        }
         html += '<div class="chat-line' + (isRoyal ? ' royal' : '') + '">';
-        html += '<div class="avatar' + (isRoyal ? ' royal' : '') + '">' + escapeHtml(l.speaker.slice(0, 1)) + '</div>';
+        html += '<div class="avatar' + extraClass + '">' + escapeHtml(l.speaker.slice(0, 1)) + '</div>';
         html += '<div class="chat-body"><div class="who">' + escapeHtml(l.speaker) + '</div><div class="bubble">' + escapeHtml(l.text) + '</div></div>';
         html += '</div>';
       });
@@ -454,7 +478,7 @@
       html += '</div>';
     }
 
-    html += '<h3 class="judgment-heading">당신의 역사적 선택은?</h3>';
+    html += '<h3 class="judgment-heading">' + escapeHtml(step.judgment.heading || '당신의 역사적 선택은?') + '</h3>';
     html += '<p class="lead">' + escapeHtml(step.judgment.lead) + '</p>';
     html += '<div class="choice-grid">';
     step.judgment.choices.forEach(function (c) {
@@ -503,6 +527,7 @@
     var html = '<div class="card transition-card">';
     html += '<span class="stage-badge muted">' + escapeHtml(step.badge) + '</span>';
     html += '<h2>' + escapeHtml(step.title) + '</h2>';
+    if (step.role) html += '<span class="role-badge">' + escapeHtml(step.role) + '</span>';
     html += '<p class="lead">' + escapeHtml(step.lead) + '</p>';
     html += '<div class="transition-grid">';
     step.cards.forEach(function (c) {
@@ -524,27 +549,11 @@
     return found ? found.label : choiceId;
   }
 
-  /* ══════════════ 회고 + 서논술형 글쓰기 조합기 ══════════════ */
-  function essayAutoFillText(step) {
-    var mStep = findStep('m_stage'), kStep = findStep('k_stage'), tStep = findStep('t2');
-    var mLabel = labelForChoice(mStep, ANSWERS.m_stage_choice);
-    var kLabel = labelForChoice(kStep, ANSWERS.k_stage_choice);
-
-    var claimParts = ['나는 무오사화 판단에서 "' + mLabel + '"을(를), 기묘사화 판단에서 "' + kLabel + '"을(를) 선택했다.'];
-    if (ANSWERS.m_stage_reason) claimParts.push(ANSWERS.m_stage_reason);
-    if (ANSWERS.k_stage_reason) claimParts.push(ANSWERS.k_stage_reason);
-    claimParts.push('사림이 거듭된 사화에도 훈구 비판을 멈추지 않은 것은, 자신들이 지켜야 할 원칙을 포기할 수 없었기 때문이라고 생각한다.');
-
-    var evidence = mStep.bgFacts[0].text + ' ' + kStep.bgFacts[1].text;
-
-    var counter = '일각에서는 훈구와 타협하거나 개혁의 속도를 늦추는 편이 더 안전했다고 볼 수 있다. 하지만 사림에게 그것은 3사 언관·대간으로서 지켜야 할 원칙을 스스로 저버리는 일과 같았다.';
-
-    var conclusion = tStep.callout;
-    if (ANSWERS.write1_text) conclusion += ' 글쓰기①에서 내가 쓴 "' + ANSWERS.write1_text + '"도 같은 맥락이다.';
-
-    return { claim: claimParts.join(' '), evidence: evidence, counter: counter, conclusion: conclusion };
-  }
-
+  /* ══════════════ 회고 + 서논술형 글쓰기 조합기 ══════════════
+   * ⚠️ v3.0에서 "내 선택으로 자동 완성" 기능을 완전히 제거했다(핸드오프 2번
+   * — 어떤 형태로도, 부분 자동완성·초안 제안도 넣지 않는다는 효니 확정
+   * 사항). 힌트도 항상 질문형으로만 "무엇을 떠올려야 하는지" 축만 제시하고
+   * 결론 문장은 절대 제공하지 않는다 — data.js essayParts의 hint 필드 참고. */
   function renderRecap(step) {
     var write1Step = findStep('write1');
     var sarimCardText = write1CardText(write1Step, ANSWERS.write1_sarim_card) || '(기록 없음)';
@@ -568,9 +577,9 @@
       var key = 'essay_' + p.key;
       html += '<label class="field-label">' + escapeHtml(p.label) + '</label>';
       html += '<textarea class="text-field" rows="3" data-key="' + key + '" placeholder="' + escapeAttr(p.placeholder) + '">' + escapeHtml(ANSWERS[key] || '') + '</textarea>';
+      html += hintHtml(key, p.hint);
     });
     html += '<div class="essay-actions">';
-    html += '<button type="button" class="nav-btn prev" id="essayAutoFill" style="flex:none; padding:0 16px;">🪄 내 선택으로 자동 완성</button>';
     html += '<button type="button" class="nav-btn next" id="essayCopy" style="flex:none; padding:0 16px;">📋 복사하기</button>';
     html += '</div>';
     html += '<p id="essayCopyStatus" style="margin-top:8px; font-size:.86rem; color:var(--ink-soft);"></p>';
@@ -586,14 +595,6 @@
       html: html,
       afterMount: function (root) {
         bindTextFieldsAndHints(root);
-        var autoBtn = root.querySelector('#essayAutoFill');
-        if (autoBtn) {
-          autoBtn.addEventListener('click', function () {
-            var filled = essayAutoFillText(step);
-            step.essayParts.forEach(function (p) { setAnswer('essay_' + p.key, filled[p.key]); });
-            renderCurrentStep();
-          });
-        }
         var copyBtn = root.querySelector('#essayCopy');
         if (copyBtn) {
           copyBtn.addEventListener('click', function () {
@@ -679,16 +680,39 @@
     }
   }
 
+  // 상단 고정 진행바에 사건명을 보여준다(핸드오프 3번 — 숫자만 보이던 걸
+  // 사건명이 보이게). stageDots는 한 번만 그리고, 매번 .active 클래스만 옮긴다.
+  var stageDotsBuilt = false;
+  function buildStageDots() {
+    var wrap = document.getElementById('stageDots');
+    if (!wrap || stageDotsBuilt) return;
+    var html = '';
+    CONTENT.steps.forEach(function (s, i) {
+      html += '<span class="stage-dot" data-idx="' + i + '">' + escapeHtml(s.navLabel || s.title) + '</span>';
+    });
+    wrap.innerHTML = html;
+    stageDotsBuilt = true;
+  }
+
   function updateProgress() {
+    buildStageDots();
     var total = CONTENT.steps.length;
+    var wrap = document.getElementById('stageDots');
     if (stepIndex === -1) {
       document.getElementById('progressFill').style.width = '0%';
       document.getElementById('progressLabel').textContent = '학번 확인';
+      if (wrap) wrap.querySelectorAll('.stage-dot').forEach(function (el) { el.classList.remove('active'); });
       return;
     }
     var pct = Math.round(((stepIndex) / (total - 1)) * 100);
     document.getElementById('progressFill').style.width = pct + '%';
-    document.getElementById('progressLabel').textContent = (stepIndex + 1) + ' / ' + total;
+    var current = CONTENT.steps[stepIndex];
+    document.getElementById('progressLabel').textContent = (current.navLabel || current.title) + ' (' + (stepIndex + 1) + '/' + total + ')';
+    if (wrap) {
+      wrap.querySelectorAll('.stage-dot').forEach(function (el) {
+        el.classList.toggle('active', Number(el.getAttribute('data-idx')) === stepIndex);
+      });
+    }
   }
 
   function updateNavState() {

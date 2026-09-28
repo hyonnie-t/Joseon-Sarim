@@ -9,7 +9,15 @@
  * 독립 페이지가 ../style.css를 그대로 불러 쓰므로, .card · .choice-btn ·
  * .sort- 계열 · .text-field · .field-label · .hint- 계열 · .padlet- 계열 ·
  * .nav- 계열 · .note-box · .role-badge · .recap- 계열 규칙은 이번에도 그대로
- * 유지했다(제거·이름 변경 금지).
+ * 유지했다(제거·이름 변경 금지). write1이 이후 .chat-wrap/.chat-line/
+ * .avatar/.bubble/.compose-input/.ref-* 로도 확장했으니 이 규칙들도 동일하게
+ * 보존 대상이다.
+ *
+ * v3.0(2026-09-28, 핸드오프 문서 v1 반영): 진행바 사건명 스테퍼(.stage-dots),
+ * 기묘사화 화자 색상 구분(.avatar.speaker-b/.speaker-c)만 추가했다. 이번에도
+ * write1이 쓰는 기존 규칙은 전부 그대로 두고 새 규칙만 얹었다(전체 재작성
+ * 대신 Edit로만 수정 — v2.0 때 전체 재작성으로 write1의 새 클래스를 놓칠
+ * 뻔했던 사고 재발 방지).
  * ══════════════════════════════════════════════════════════ */
 :root{
   --paper:#F6F3EB;
@@ -55,6 +63,15 @@ body{
 
 /* ── 진행 표시줄 ── */
 .progress-wrap{position:sticky; top:0; z-index:10; background:var(--paper); padding:10px 0 14px;}
+/* v3.0(핸드오프 3번) — 숫자만 보이던 진행바에 사건명을 얹는다. 읽기 전용
+ * 표시일 뿐 클릭 이동은 지원하지 않는다(순서를 건너뛰지 못하게 하는 기존
+ * 원칙 유지). */
+.stage-dots{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;}
+.stage-dot{
+  font-size:.74rem; font-weight:600; color:var(--ink-soft); background:var(--card);
+  border:1px solid var(--line); border-radius:999px; padding:3px 10px;
+}
+.stage-dot.active{color:#fff; background:var(--indigo); border-color:var(--indigo);}
 .progress-track{height:6px; border-radius:999px; background:var(--line); overflow:hidden;}
 .progress-fill{height:100%; background:linear-gradient(90deg, var(--indigo), var(--ochre)); transition:width .3s ease;}
 .progress-label{font-size:.86rem; color:var(--ink-soft); margin-top:6px; text-align:right;}
@@ -141,6 +158,11 @@ table.cmp-table th{background:#F0EDE3;}
   border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.2);
 }
 .avatar.royal{background:var(--ochre);}
+/* v3.0(핸드오프 3번, 기묘사화 대화 전용) — 조광조(기본 .avatar, 낙관색)
+ * 외의 비왕족 화자를 구분하는 보조 색상. write1이 공유하는 .avatar 기본
+ * 규칙·.avatar.royal은 그대로 두고 이 두 클래스만 새로 추가했다. */
+.avatar.speaker-b{background:var(--indigo);}
+.avatar.speaker-c{background:var(--jade);}
 .chat-line.royal{flex-direction:row-reverse;}
 .chat-body{display:flex; flex-direction:column; max-width:78%;}
 .chat-line.royal .chat-body{align-items:flex-end;}
