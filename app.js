@@ -16,6 +16,17 @@
   var stepIndex = -1; // -1 = 로그인 확인 화면, 0..N-1 = CONTENT.steps
   var submitState = 'idle'; // idle | saving | done | failed
 
+  /* ── 글쓰기① 전용 상태(v1.2) — 카드 분류 단계는 ANSWERS에 바로 반영되지 않는
+   * "몇 번 틀렸는지/이번에 뭐가 틀렸는지" 같은 화면 표시용 상태가 필요해서
+   * write1/app.js(독립 페이지)와 같은 방식으로 모듈 변수로 따로 둔다.
+   * loadAnswers() 직후 initWrite1State()가 저장된 답으로 한 번 맞춰준다. */
+  var WRITE1_MIN_TEXT_LEN = 10;
+  var WRITE1_CARD_ORDER = null;
+  var WRITE1_CLASSIFY = {};
+  var WRITE1_WRONG = [];
+  var WRITE1_CHECKED = false;
+  var WRITE1_PHASE = 'classify'; // classify | write
+
   /* ── 학번 파싱: 학년(1) + 반(2) + 번호(2) 5자리. history26 parseStudentId()와 같은 규칙. ── */
   function parseStudentId(sid) {
     var s = String(sid || '').trim();
@@ -152,24 +163,144 @@
     return !!parseStudentId(SESSION.sid) && SESSION.name.trim().length > 0;
   }
 
-  /* ── 글쓰기 ① — 실제로 여기서 쓰고, 다 쓰면 복사해서 Padlet에 붙여넣는다 ── */
+  /* ── 글쓰기 ① — 카드 분류(사림·훈구) → 카드 두 장 골라 한 마디 쓰기 (v1.2) ──
+   * write1/app.js(독립 배포 페이지)와 같은 흐름을 이 스텝 기반 앱 안에 이식한
+   * 것. 전역 이전/다음 내비게이션은 그대로 두고, 그 안에서 phase(classify/write)
+   * 를 자체적으로 넘긴다 — "확인하기"는 스텝을 넘기는 버튼이 아니라 카드 분류가
+   * 맞았는지만 확인하는 별도 버튼이다. */
+  function shuffledIds(cards) {
+    var ids = cards.map(function (c) { return c.id; });
+    for (var i = ids.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = ids[i]; ids[i] = ids[j]; ids[j] = tmp;
+    }
+    return ids;
+  }
+  function write1CardById(step, id) {
+    for (var i = 0; i < step.cards.length; i++) { if (step.cards[i].id === id) return step.cards[i]; }
+    return null;
+  }
+  function write1CardText(step, id) {
+    var c = write1CardById(step, id);
+    return c ? c.text : '';
+  }
+  function write1CardsBySide(step, side) {
+    return step.cards.filter(function (c) { return c.answer === side; });
+  }
+  function write1CardsToShow(step) {
+    if (!WRITE1_CHECKED) return WRITE1_CARD_ORDER;
+    return WRITE1_CARD_ORDER.filter(function (id) { return WRITE1_WRONG.indexOf(id) !== -1; });
+  }
+  function write1AllClassified(ids) {
+    return ids.every(function (id) { return !!WRITE1_CLASSIFY[id]; });
+  }
+
+  // 로그인 확인 직후 한 번 호출 — 저장된 답으로 카드 순서·분류 상태·phase를 맞춘다.
+  function initWrite1State() {
+    var step = findStep('write1');
+    WRITE1_CARD_ORDER = shuffledIds(step.cards);
+    WRITE1_CLASSIFY = ANSWERS.write1_classification || {};
+    var allCorrect = step.cards.length > 0 && step.cards.every(function (c) { return WRITE1_CLASSIFY[c.id] === c.answer; });
+    if (allCorrect) {
+      WRITE1_CHECKED = true;
+      WRITE1_WRONG = [];
+      WRITE1_PHASE = 'write';
+    } else {
+      WRITE1_CHECKED = (ANSWERS.write1_attempts || 0) > 0;
+      WRITE1_WRONG = WRITE1_CHECKED ? step.cards.filter(function (c) { return WRITE1_CLASSIFY[c.id] !== c.answer; }).map(function (c) { return c.id; }) : [];
+      WRITE1_PHASE = 'classify';
+    }
+  }
+
   function renderWrite1(step) {
-    var chosenKey = step.id + '_choice';
-    var textKey = step.id + '_text';
-    var chosen = ANSWERS[chosenKey];
-    var text = ANSWERS[textKey] || '';
+    return WRITE1_PHASE === 'write' ? renderWrite1Write(step) : renderWrite1Classify(step);
+  }
+
+  function renderWrite1Classify(step) {
+    var ids = write1CardsToShow(step);
     var html = '<div class="card">';
-    html += '<h2>' + escapeHtml(step.title) + '</h2>';
-    html += '<p class="lead">' + escapeHtml(step.lead) + '</p>';
-    html += '<p style="margin-bottom:14px; font-weight:600;">' + escapeHtml(step.prompt) + '</p>';
-    html += '<div class="choice-list">';
-    step.options.forEach(function (opt) {
-      html += '<button type="button" class="choice-btn' + (chosen === opt.id ? ' selected' : '') + '" data-choice="' + opt.id + '">' + escapeHtml(opt.label) + '</button>';
+    html += '<h2>' + escapeHtml(step.title) + ' — 카드 분류</h2>';
+    html += '<p class="lead">' + escapeHtml(step.classifyLead) + '</p>';
+    if (WRITE1_CHECKED && ids.length > 0) {
+      html += '<div class="note-box">' + escapeHtml(step.wrongMsg) + '</div>';
+    }
+    html += '<div class="classify-list">';
+    ids.forEach(function (id) {
+      var card = write1CardById(step, id);
+      var picked = WRITE1_CLASSIFY[id];
+      html += '<div class="classify-card" data-card-row="' + id + '">';
+      html += '<p class="classify-text">' + escapeHtml(card.text) + '</p>';
+      html += '<div class="classify-btns">';
+      html += '<button type="button" class="classify-btn' + (picked === 'sarim' ? ' selected-sarim' : '') + '" data-card="' + id + '" data-side="sarim">사림</button>';
+      html += '<button type="button" class="classify-btn' + (picked === 'hoongu' ? ' selected-hoongu' : '') + '" data-card="' + id + '" data-side="hoongu">훈구</button>';
+      html += '</div></div>';
     });
     html += '</div>';
-    html += '<label class="field-label">' + escapeHtml(step.writingLabel) + '</label>';
-    html += '<textarea class="text-field" rows="4" data-key="' + textKey + '">' + escapeHtml(text) + '</textarea>';
-    html += hintHtml(textKey, step.writingHint);
+    html += '<div class="nav-row"><button type="button" class="nav-btn next" id="checkClassify"' + (write1AllClassified(ids) ? '' : ' disabled') + '>확인하기</button></div>';
+    html += '</div>';
+    return {
+      html: html,
+      afterMount: function (root) {
+        var checkBtn = root.querySelector('#checkClassify');
+        // 카드가 10장이라 다른 스텝의 choice-btn처럼 클릭마다 renderCurrentStep()을
+        // 부르면 매번 화면이 맨 위로 스크롤돼 버린다(카드를 10번 눌러야 하는데
+        // 그때마다 스크롤이 튀는 건 write1/app.js에서도 피했던 문제) — 여기서는
+        // 버튼 클래스만 직접 바꿔서 스크롤 위치를 유지한다.
+        root.querySelectorAll('.classify-btn').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var id = btn.getAttribute('data-card');
+            var side = btn.getAttribute('data-side');
+            WRITE1_CLASSIFY[id] = side;
+            setAnswer('write1_classification', WRITE1_CLASSIFY);
+
+            var row = root.querySelector('.classify-card[data-card-row="' + id + '"]');
+            row.querySelectorAll('.classify-btn').forEach(function (b) {
+              b.classList.remove('selected-sarim', 'selected-hoongu');
+            });
+            btn.classList.add(side === 'sarim' ? 'selected-sarim' : 'selected-hoongu');
+
+            checkBtn.disabled = !write1AllClassified(write1CardsToShow(step));
+          });
+        });
+        checkBtn.addEventListener('click', function () {
+          var visible = write1CardsToShow(step);
+          ANSWERS.write1_attempts = (ANSWERS.write1_attempts || 0) + 1;
+          setAnswer('write1_attempts', ANSWERS.write1_attempts);
+          var newWrong = visible.filter(function (id) {
+            return WRITE1_CLASSIFY[id] !== write1CardById(step, id).answer;
+          });
+          WRITE1_CHECKED = true;
+          WRITE1_WRONG = newWrong;
+          if (WRITE1_WRONG.length === 0) WRITE1_PHASE = 'write';
+          renderCurrentStep();
+        });
+      }
+    };
+  }
+
+  function renderWrite1Write(step) {
+    var sarimCards = write1CardsBySide(step, 'sarim');
+    var hoonguCards = write1CardsBySide(step, 'hoongu');
+    var text = ANSWERS.write1_text || '';
+    var html = '<div class="card">';
+    html += '<h2>' + escapeHtml(step.title) + ' — 한 마디 쓰기</h2>';
+    html += '<p class="lead">' + escapeHtml(step.writeLead) + '</p>';
+    html += '<label class="field-label">사림 카드 하나 선택</label>';
+    html += '<div class="choice-list">';
+    sarimCards.forEach(function (c) {
+      html += '<button type="button" class="choice-btn' + (ANSWERS.write1_sarim_card === c.id ? ' selected' : '') + '" data-group="sarim" data-card="' + c.id + '">' + escapeHtml(c.text) + '</button>';
+    });
+    html += '</div>';
+    html += '<label class="field-label">훈구 카드 하나 선택</label>';
+    html += '<div class="choice-list">';
+    hoonguCards.forEach(function (c) {
+      html += '<button type="button" class="choice-btn' + (ANSWERS.write1_hoongu_card === c.id ? ' selected' : '') + '" data-group="hoongu" data-card="' + c.id + '">' + escapeHtml(c.text) + '</button>';
+    });
+    html += '</div>';
+    html += '<label class="field-label">한 마디</label>';
+    html += '<textarea class="text-field" rows="4" data-key="write1_text" placeholder="' + escapeAttr(step.writePlaceholder) + '">' + escapeHtml(text) + '</textarea>';
+    html += hintHtml('write1_text', step.writingHint);
+    html += '<div class="note-box">' + escapeHtml(step.doneNote) + '</div>';
     html += '<div class="padlet-box" style="margin-top:16px;">';
     html += '<p>' + escapeHtml(step.copyLead) + '</p>';
     html += '<button type="button" class="nav-btn next" id="copyWrite1" style="margin-top:10px; display:inline-block; width:auto; padding:0 20px;">복사하기</button>';
@@ -179,9 +310,9 @@
     return {
       html: html,
       afterMount: function (root) {
-        root.querySelectorAll('.choice-btn').forEach(function (btn) {
+        root.querySelectorAll('.choice-btn[data-group]').forEach(function (btn) {
           btn.addEventListener('click', function () {
-            setAnswer(chosenKey, btn.getAttribute('data-choice'));
+            setAnswer('write1_' + btn.getAttribute('data-group') + '_card', btn.getAttribute('data-card'));
             renderCurrentStep();
           });
         });
@@ -189,8 +320,9 @@
         var copyBtn = root.querySelector('#copyWrite1');
         if (copyBtn) {
           copyBtn.addEventListener('click', function () {
-            var choiceLabel = labelForChoice(step, ANSWERS[chosenKey]);
-            var payload = '[글쓰기①] ' + (choiceLabel || '') + '\n' + (ANSWERS[textKey] || '');
+            var payload = '사림 카드: ' + write1CardText(step, ANSWERS.write1_sarim_card) + '\n' +
+              '훈구 카드: ' + write1CardText(step, ANSWERS.write1_hoongu_card) + '\n' +
+              '한 마디: ' + (ANSWERS.write1_text || '');
             copyToClipboard(payload).then(function (ok) {
               var statusEl = document.getElementById('copyStatus');
               if (statusEl) statusEl.textContent = ok ? '복사됐어. Padlet에 붙여넣어줘.' : '복사에 실패했어. 직접 옮겨 적어줘.';
@@ -440,12 +572,14 @@
   }
 
   function renderRecap(step) {
-    var startLabel = ANSWERS.write1_choice === 'criticize' ? '비판한다' : (ANSWERS.write1_choice === 'endure' ? '참는다' : '(기록 없음)');
+    var write1Step = findStep('write1');
+    var sarimCardText = write1CardText(write1Step, ANSWERS.write1_sarim_card) || '(기록 없음)';
+    var hoonguCardText = write1CardText(write1Step, ANSWERS.write1_hoongu_card) || '(기록 없음)';
     var mStep = findStep('m_judgment'), kStep = findStep('k_judgment'), interpStep = findStep('k_interpret');
     var html = '<div class="card">';
     html += '<h2>' + escapeHtml(step.title) + '</h2>';
 
-    html += '<div class="recap-item"><h3>글쓰기 ① — 네 선택과 이유</h3><div class="recap-value">' + escapeHtml(startLabel) + (ANSWERS.write1_text ? ('<br>' + escapeHtml(ANSWERS.write1_text)) : '') + '</div></div>';
+    html += '<div class="recap-item"><h3>글쓰기 ① — 고른 카드와 한 마디</h3><div class="recap-value">사림 카드: ' + escapeHtml(sarimCardText) + '<br>훈구 카드: ' + escapeHtml(hoonguCardText) + (ANSWERS.write1_text ? ('<br>' + escapeHtml(ANSWERS.write1_text)) : '') + '</div></div>';
 
     html += '<div class="recap-item"><h3>무오사화 — 해석 비교</h3>';
     html += '<div class="recap-value">' + escapeHtml(ANSWERS.m_sourceB_compare || '(기록 없음)') + '</div></div>';
@@ -507,7 +641,7 @@
   /* ══════════════ 스텝 완료 판정 (다음 버튼 활성화 조건) ══════════════ */
   function stepIsComplete(step) {
     switch (step.type) {
-      case 'write1': return !!ANSWERS[step.id + '_choice'] && (ANSWERS[step.id + '_text'] || '').trim().length > 0;
+      case 'write1': return !!ANSWERS.write1_sarim_card && !!ANSWERS.write1_hoongu_card && (ANSWERS.write1_text || '').trim().length >= WRITE1_MIN_TEXT_LEN;
       case 'sourceReveal': return step.questions.every(function (q) {
         var key = step.id + '_' + q.id;
         if (q.choices) return !!ANSWERS[key];
@@ -593,6 +727,7 @@
     if (stepIndex === -1) {
       if (!loginIsComplete()) return;
       loadAnswers(); // 확정된 SESSION.sid로 그 학생의 저장 기록을 불러온다
+      initWrite1State(); // 글쓰기① 카드 순서·분류 상태를 저장된 답 기준으로 맞춘다
       stepIndex = 0;
       renderCurrentStep();
       return;
@@ -618,8 +753,9 @@
   function buildReflection() {
     var lines = [];
     function push(label, val) { if (val) lines.push('[' + label + '] ' + val); }
-    push('글쓰기① 선택', ANSWERS.write1_choice === 'criticize' ? '비판한다' : (ANSWERS.write1_choice === 'endure' ? '참는다' : ''));
-    push('글쓰기① 이유', ANSWERS.write1_text);
+    push('글쓰기① 사림 카드', write1CardText(findStep('write1'), ANSWERS.write1_sarim_card));
+    push('글쓰기① 훈구 카드', write1CardText(findStep('write1'), ANSWERS.write1_hoongu_card));
+    push('글쓰기① 한 마디', ANSWERS.write1_text);
     push('조의제문 해석 1', ANSWERS.m_sourceA_q1);
     push('조의제문 해석 2', ANSWERS.m_sourceA_q2);
     push('해석 비교', ANSWERS.m_sourceB_compare);

@@ -46,19 +46,34 @@ window.CONTENT = {
   ],
 
   steps: [
-    /* ── 0. 글쓰기 ① ── */
+    /* ── 0. 글쓰기 ① ──
+     * v1.2(2026-09-28, 효니 핸드오프 "핸드오프 문서 v1 — 사림 단원 글쓰기 ① 수정"
+     * 반영, 전체 시뮬 쪽도 같이 맞춤) — "비판할래/참을래 + 이유" 구조를 "카드
+     * 분류(사림·훈구) → 카드 두 장 골라 한 마디 쓰기" 구조로 교체. write1/app.js
+     * (독립 배포 페이지)와 완전히 같은 문구·카드를 쓴다 — 바꿀 땐 두 파일 다 고칠 것. */
     {
       id: 'write1', type: 'write1',
       title: '글쓰기 ① — 먼저 써보자',
-      lead: '아직 사화 이야기는 하나도 안 나와. 지금 아는 것만 가지고 판단해봐.',
-      prompt: '너는 성종 때 3사 관리가 됐어. 훈구의 잘못이 눈에 보여. 비판할래, 참을래? 123쪽에서 근거 하나를 넣어서 이유를 써봐.',
-      options: [
-        { id: 'criticize', label: '비판한다' },
-        { id: 'endure', label: '참는다' }
-      ],
-      writingLabel: '이유를 적어줘 (교과서 123쪽 근거 하나 포함)',
-      writingHint: '123쪽에서 훈구·사림에 대해 어떤 문장을 근거로 들 수 있을까?',
-      copyLead: '다 썼으면 아래 버튼으로 복사해서 Padlet에 붙여넣어줘. (이 글쓰기는 필수야)'
+      classifyLead: '아직 사화 이야기는 하나도 안 나와. 교과서 123쪽까지 읽은 걸로 해봐. 카드가 10장 있어. 사림 이야기면 사림 쪽으로, 훈구 이야기면 훈구 쪽으로 옮겨봐.',
+      wrongMsg: '123쪽 본문을 다시 읽어봐.',
+      writeLead: '너는 성종 때 3사 관리야. 훈구 대신들에게 한 마디 해봐. 방금 분류한 카드에서 사림 카드 하나, 훈구 카드 하나를 골라서 넣어. 1~2문장이면 돼. (실제 기록이 아니라 네가 상상해서 쓰는 창작이야.)',
+      writingHint: '내가 고른 훈구 카드는 사림이 보기에 뭐가 문제일까? 내가 고른 사림 카드는 그 문제와 어떻게 이어질까?',
+      writePlaceholder: '훈구 대신들에게 하고 싶은 말을 1~2문장으로',
+      copyLead: '다 썼으면 아래 버튼으로 복사해서 Padlet에 붙여넣어줘. (이 글쓰기는 필수야)',
+      doneNote: '교과서가 정리한 구분이야. 사림과 훈구를 대립하는 두 집단으로 보는 설명 방식에는 학계의 다른 시각도 있어.',
+      // 카드 문구는 교과서 123쪽 서술 그대로 — 임의 수정 금지(핸드오프 문서 4장).
+      cards: [
+        { id: 'c1', text: '고려 말 조선 건국에 참여하지 않고 지방에서 학문 연구와 교육에 힘씀', answer: 'sarim', sourceId: 'T-1', verified: true },
+        { id: 'c2', text: '정몽주, 길재의 학통을 이음', answer: 'sarim', sourceId: 'T-1', verified: true },
+        { id: 'c3', text: '도덕과 의리를 바탕으로 하는 왕도 정치와 향촌 자치를 추구', answer: 'sarim', sourceId: 'T-1', verified: true },
+        { id: 'c4', text: '성종 때 김종직을 비롯한 영남 지역 출신이 많이 등용됨', answer: 'sarim', sourceId: 'T-1', verified: true },
+        { id: 'c5', text: '주로 3사의 언관직에 임명되어 훈구 세력의 부정한 행위와 권력 독점을 비판함', answer: 'sarim', sourceId: 'T-1', verified: true },
+        { id: 'c6', text: '조선 건국과 국왕 즉위에 앞장선 사대부가 공신이 됨', answer: 'hoongu', sourceId: 'T-1', verified: true },
+        { id: 'c7', text: '세조가 왕위에 오르는 데 공을 세운 한명회 등이 고위 관직을 차지함', answer: 'hoongu', sourceId: 'T-1', verified: true },
+        { id: 'c8', text: '그 공로로 국가로부터 많은 토지와 노비를 받음', answer: 'hoongu', sourceId: 'T-1', verified: true },
+        { id: 'c9', text: '일부는 왕실과 혼인 관계를 맺어 세력 기반을 다짐', answer: 'hoongu', sourceId: 'T-1', verified: true },
+        { id: 'c10', text: '대를 이어 권력을 독점하면서 왕권을 제약함', answer: 'hoongu', sourceId: 'T-1', verified: true }
+      ]
     },
 
     /* ── 1. 무오사화: 배경 ── */
@@ -260,7 +275,9 @@ window.CONTENT = {
       id: 'recap', type: 'recap',
       title: '지금까지 네가 남긴 것들',
       padletLead: '글쓰기 ②(선택)는 여기 링크에서 이어서 써줘.',
-      padletPrompt: '아까 네 선택을 다시 봐. 시뮬을 하고 나서도 같은 선택을 할래? 바뀌었으면 어떤 장면 때문이고, 그대로면 왜 그대로야?'
+      // v1.2: 글쓰기①이 "카드 분류 + 한 마디" 구조로 바뀌면서 "선택"이 아니라
+      // "고른 카드·쓴 한 마디"를 다시 돌아보는 질문으로 맞췄다(효니 지시).
+      padletPrompt: '아까 고른 카드와 한 마디를 다시 봐. 시뮬을 하고 나서도 그 카드들을 그대로 고를래? 바뀐 게 있다면 어떤 장면 때문이고, 그대로라면 왜 그대로야?'
     }
   ]
 };
