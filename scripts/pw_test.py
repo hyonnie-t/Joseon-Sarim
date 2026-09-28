@@ -57,6 +57,10 @@ with sync_playwright() as p:
         view_card = page.locator('.view-card[data-choice="view1"]')
         if view_card.count() > 0 and page.locator('.view-card.selected').count() == 0:
             view_card.click()
+        # sourceReveal 안의 선택형 질문 (예: m_sourceA_q1)
+        qchoice = page.locator('.choice-btn[data-qkey]')
+        if qchoice.count() > 0 and page.locator('.choice-btn[data-qkey].selected').count() == 0:
+            qchoice.first.click()
 
         fill_all_textareas(page)
         page.wait_for_timeout(100)
