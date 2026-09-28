@@ -239,14 +239,42 @@
     var s = step.source;
     html += '<div class="source-quote' + (s.verified ? '' : ' placeholder') + '">' + escapeHtml(s.text) + '</div>';
     html += '<div class="fact-meta">' + srcBadgeHtml(s.sourceId) + (s.verified ? '' : '<span class="badge-unverified">원문 대조 전</span>') + '</div>';
+    if (s.easy) {
+      html += '<button type="button" class="easy-toggle" data-target="' + step.id + '_easy">💬 쉬운 말로 풀어보면 (교사 검수 전)</button>';
+      html += '<div class="easy-box" id="' + step.id + '_easy" hidden><span class="easy-label">학생용 풀이 · 교사 검수 전</span>' + escapeHtml(s.easy) + '</div>';
+    }
+    if (s.fullText) {
+      html += '<button type="button" class="easy-toggle" data-target="' + step.id + '_full">🔎 궁금하면 전문 보기</button>';
+      html += '<div class="easy-box" id="' + step.id + '_full" hidden><div class="source-quote' + (s.verified ? '' : ' placeholder') + '" style="margin-bottom:0;">' + escapeHtml(s.fullText) + '</div></div>';
+    }
     step.questions.forEach(function (q) {
       var key = step.id + '_' + q.id;
       html += '<label class="field-label">' + escapeHtml(q.label) + '</label>';
-      html += '<textarea class="text-field" rows="2" data-key="' + key + '">' + escapeHtml(ANSWERS[key] || '') + '</textarea>';
-      html += hintHtml(key, q.hint);
+      if (q.choices) {
+        html += '<div class="choice-list">';
+        q.choices.forEach(function (c) {
+          html += '<button type="button" class="choice-btn' + (ANSWERS[key] === c.id ? ' selected' : '') + '" data-qkey="' + key + '" data-choice="' + c.id + '">' + escapeHtml(c.label) + '</button>';
+        });
+        html += '</div>';
+      } else {
+        html += '<textarea class="text-field" rows="2" data-key="' + key + '">' + escapeHtml(ANSWERS[key] || '') + '</textarea>';
+        html += hintHtml(key, q.hint);
+      }
     });
     html += '</div>';
-    return { html: html, afterMount: bindTextFieldsAndHints };
+    return {
+      html: html,
+      afterMount: function (root) {
+        bindEasyToggles(root);
+        bindTextFieldsAndHints(root);
+        root.querySelectorAll('.choice-btn[data-qkey]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            setAnswer(btn.getAttribute('data-qkey'), btn.getAttribute('data-choice'));
+            renderCurrentStep();
+          });
+        });
+      }
+    };
   }
 
   function renderSourceTable(step) {
@@ -261,11 +289,6 @@
     });
     html += '</tbody></table>';
     html += '<div class="fact-meta">' + srcBadgeHtml(t.sourceId) + (t.verified ? '' : '<span class="badge-unverified">원문 대조 전</span>') + '</div>';
-    if (step.rawQuote) {
-      html += '<button type="button" class="easy-toggle" data-target="rawQuoteBox">📜 원문 그대로 보기</button>';
-      html += '<div class="easy-box" id="rawQuoteBox" hidden><div class="source-quote' + (step.rawQuote.verified ? '' : ' placeholder') + '" style="margin-bottom:0;">' + escapeHtml(step.rawQuote.text) + '</div></div>';
-    }
-    if (step.caveat) html += factHtml(step.caveat);
     var key = step.id + '_' + step.question.id;
     html += '<label class="field-label">' + escapeHtml(step.question.label) + '</label>';
     html += '<textarea class="text-field" rows="2" data-key="' + key + '">' + escapeHtml(ANSWERS[key] || '') + '</textarea>';
@@ -485,7 +508,11 @@
   function stepIsComplete(step) {
     switch (step.type) {
       case 'write1': return !!ANSWERS[step.id + '_choice'] && (ANSWERS[step.id + '_text'] || '').trim().length > 0;
-      case 'sourceReveal': return step.questions.every(function (q) { return (ANSWERS[step.id + '_' + q.id] || '').trim().length > 0; });
+      case 'sourceReveal': return step.questions.every(function (q) {
+        var key = step.id + '_' + q.id;
+        if (q.choices) return !!ANSWERS[key];
+        return (ANSWERS[key] || '').trim().length > 0;
+      });
       case 'sourceTable': return (ANSWERS[step.id + '_' + step.question.id] || '').trim().length > 0;
       case 'judgment': return !!ANSWERS[step.id + '_choice'] && (ANSWERS[step.id + '_reason'] || '').trim().length > 0;
       case 'interpretation': return !!ANSWERS[step.id + '_choice'];
