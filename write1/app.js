@@ -37,6 +37,15 @@
  * 서로 무관해 보이던 문제를, 순서를 강제하고 선택 내용을 눈앞에 다시
  * 보여주는 방식으로 연결했다.
  *
+ * v1.7(2026-09-28, 효니 피드백 "글쓰기를 꼭 카드를 근거로 써야 할까? 제약이
+ * 너무 크다" 반영) — v1.6의 "카드 두 장 선택 → 그걸 근거로만 쓰기" 구조를
+ * 되돌렸다. 카드 선택 자체를 없애고, 분류 단계에서 다룬 10장을 읽기 전용
+ * 참고 목록(.ref-cards)으로만 다시 보여준다 — 클릭 안 되고 고르지 않아도
+ * 됨. 쓰기 칸은 카드 선택 여부와 무관하게 처음부터 열려 있고, 제출 조건도
+ * 글자 수(MIN_TEXT_LEN)뿐이다. 역할 강조(.role-banner, v1.6)는 유지.
+ * write1_sarim_card/write1_hoongu_card 답안 필드, 관련 UI·제출 데이터
+ * (choiceSummary, choicesJson의 sarim_card/hoongu_card)는 모두 제거.
+ *
  * ../config.js를 그대로 불러 쓴다(SHEET_WEBAPP_URL, PADLET_BY_BAN 공유) —
  * 백엔드 URL이나 Padlet 링크가 바뀌면 한 곳(config.js)만 고치면 된다.
  * GAME_NAME만 이 페이지 전용으로 따로 둔다: 나중에 전체 시뮬이 열리면
@@ -200,8 +209,7 @@
   }
 
   function writeIsComplete() {
-    return !!ANSWERS.write1_sarim_card && !!ANSWERS.write1_hoongu_card &&
-      (ANSWERS.write1_text || '').trim().length >= MIN_TEXT_LEN;
+    return (ANSWERS.write1_text || '').trim().length >= MIN_TEXT_LEN;
   }
 
   function padletLinkHtml(label) {
@@ -297,35 +305,22 @@
     var sarimCards = cardsBySide('sarim');
     var hoonguCards = cardsBySide('hoongu');
     var text = ANSWERS.write1_text || '';
-    var bothPicked = !!ANSWERS.write1_sarim_card && !!ANSWERS.write1_hoongu_card;
     var html = '<div class="card">';
     html += '<h2>🖋️ 글쓰기 ① — 한 마디 쓰기</h2>';
     html += '<div class="role-banner">';
     html += '<div class="role-banner-role">' + escapeHtml(WRITE_ROLE) + '</div>';
     html += '<p class="role-banner-body">' + escapeHtml(WRITE_INTRO) + '</p>';
     html += '</div>';
-    html += '<label class="field-label">📜 사림 카드 하나 선택</label>';
-    html += '<div class="pick-zone pick-zone-sarim">';
-    sarimCards.forEach(function (c) {
-      html += '<button type="button" class="pick-chip' + (ANSWERS.write1_sarim_card === c.id ? ' selected' : '') + '" data-group="sarim" data-card="' + c.id + '">' + escapeHtml(c.text) + '</button>';
-    });
+    html += '<p class="ref-caption">📖 참고 — 방금 분류한 카드야. 눌러도 아무 반응 없어, 읽기용이야.</p>';
+    html += '<div class="ref-cards">';
+    html += '<div class="ref-col ref-col-sarim"><div class="ref-col-head">📜 사림</div>';
+    sarimCards.forEach(function (c) { html += '<div class="ref-item">' + escapeHtml(c.text) + '</div>'; });
     html += '</div>';
-    html += '<label class="field-label">🏛 훈구 카드 하나 선택</label>';
-    html += '<div class="pick-zone pick-zone-hoongu">';
-    hoonguCards.forEach(function (c) {
-      html += '<button type="button" class="pick-chip' + (ANSWERS.write1_hoongu_card === c.id ? ' selected' : '') + '" data-group="hoongu" data-card="' + c.id + '">' + escapeHtml(c.text) + '</button>';
-    });
+    html += '<div class="ref-col ref-col-hoongu"><div class="ref-col-head">🏛 훈구</div>';
+    hoonguCards.forEach(function (c) { html += '<div class="ref-item">' + escapeHtml(c.text) + '</div>'; });
     html += '</div>';
-    if (!bothPicked) {
-      html += '<p class="write-gate">👆 사림 카드 하나, 훈구 카드 하나를 다 고르면 쓰기 칸이 열려.</p>';
-      html += '</div>';
-      return html;
-    }
-    html += '<div class="pick-recap">';
-    html += '<div class="pick-recap-item pick-recap-sarim"><span class="pick-recap-tag">사림</span>' + escapeHtml(cardText(ANSWERS.write1_sarim_card)) + '</div>';
-    html += '<div class="pick-recap-item pick-recap-hoongu"><span class="pick-recap-tag">훈구</span>' + escapeHtml(cardText(ANSWERS.write1_hoongu_card)) + '</div>';
     html += '</div>';
-    html += '<label class="field-label">✍️ 위 두 카드를 근거로, 훈구 대신들에게 한 마디</label>';
+    html += '<label class="field-label">✍️ 훈구 대신들에게 한 마디</label>';
     html += '<textarea class="text-field" rows="4" id="write1Text" placeholder="' + escapeAttr(WRITE_PLACEHOLDER) + '">' + escapeHtml(text) + '</textarea>';
     html += '<button type="button" class="hint-toggle" data-target="write1Hint">💡 막막하면 힌트 보기</button>';
     html += '<div class="hint-box" id="write1Hint" hidden>' + escapeHtml(WRITING_HINT) + '</div>';
@@ -344,8 +339,8 @@
   function doneHtml() {
     var html = '<div class="card">';
     html += '<h2>✅ 제출됐어</h2>';
-    html += '<div class="recap-item"><h3>네가 고른 카드와 한 마디</h3>';
-    html += '<div class="recap-value">사림 카드: ' + escapeHtml(cardText(ANSWERS.write1_sarim_card)) + '<br>훈구 카드: ' + escapeHtml(cardText(ANSWERS.write1_hoongu_card)) + '<br>' + escapeHtml(ANSWERS.write1_text || '') + '</div></div>';
+    html += '<div class="recap-item"><h3>네가 쓴 한 마디</h3>';
+    html += '<div class="recap-value">' + escapeHtml(ANSWERS.write1_text || '') + '</div></div>';
     html += '<div class="note-box">' + escapeHtml(DONE_NOTE) + '</div>';
     html += '<div class="note-box">Padlet에도 붙여넣었는지 한 번 더 확인해줘. 이후 무오·기묘사화 시뮬레이션은 선생님이 안내할 때 이어서 진행하면 돼.</div>';
     html += '<p id="submitStatus2" style="margin-top:10px; font-size:.86rem; color:var(--ink-soft);"></p>';
@@ -394,18 +389,10 @@
       });
       root.querySelector('#checkClassify').addEventListener('click', checkClassification);
     } else if (phase === 'write') {
-      // 카드를 둘 다 고르기 전엔 쓰기 영역(textarea/힌트/복사/제출) 자체를
-      // 렌더링하지 않는다 (writeHtml 참고) — "선택부터 끝내야 쓰기 칸이 열린다"는
-      // 순서를 화면 구조로 강제해서, 선택과 글쓰기가 이어진 하나의 흐름으로
-      // 보이게 한다. 그래서 아래 요소들도 있을 때만 이벤트를 건다.
-      root.querySelectorAll('.pick-chip').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          setAnswer('write1_' + btn.getAttribute('data-group') + '_card', btn.getAttribute('data-card'));
-          render();
-        });
-      });
+      // 방금 분류한 카드는 참고용으로만 다시 보여준다(writeHtml의 .ref-cards) —
+      // 클릭 불가, 선택 강제 없음. 글쓰기는 카드 선택 여부와 무관하게 글자 수만
+      // 채우면 제출 가능하다 (writeIsComplete 참고).
       var submitBtn = root.querySelector('#submitWrite1');
-      if (!submitBtn) return;
       function refreshSubmitState() { submitBtn.disabled = !writeIsComplete(); }
 
       var textEl = root.querySelector('#write1Text');
@@ -418,9 +405,7 @@
         box.hidden = !box.hidden;
       });
       root.querySelector('#copyWrite1').addEventListener('click', function () {
-        var payload = '사림 카드: ' + cardText(ANSWERS.write1_sarim_card) + '\n' +
-          '훈구 카드: ' + cardText(ANSWERS.write1_hoongu_card) + '\n' +
-          '한 마디: ' + (ANSWERS.write1_text || '');
+        var payload = ANSWERS.write1_text || '';
         copyToClipboard(payload).then(function (ok) {
           document.getElementById('copyStatus').textContent = ok ? '복사됐어. Padlet에 붙여넣어줘.' : '복사에 실패했어. 직접 옮겨 적어줘.';
         });
@@ -440,14 +425,12 @@
       studentId: SESSION.sid,
       studentName: SESSION.name,
       gameName: WRITE1_GAME_NAME,
-      choiceSummary: '사림:' + cardText(ANSWERS.write1_sarim_card) + ' / 훈구:' + cardText(ANSWERS.write1_hoongu_card),
+      choiceSummary: '',
       diffSummary: '',
       reflection: ANSWERS.write1_text || '',
       choicesJson: JSON.stringify({
         classification: CLASSIFY,
         attempts: ANSWERS.write1_attempts || 1,
-        sarim_card: ANSWERS.write1_sarim_card,
-        hoongu_card: ANSWERS.write1_hoongu_card,
         write1_text: ANSWERS.write1_text
       })
     };
