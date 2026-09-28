@@ -17,6 +17,16 @@
  * design-principles.md 위반으로 공식 확정됐기 때문. 판단 발문을 스텝마다
  * data.js의 judgment.heading으로 변주하고, 전환 카드(t1/t2)에도 role
  * 프레이밍을 추가하고, 기묘사화 대화에 화자별 아바타 색상을 추가했다.
+ *
+ * v3.2(2026-09-28, 효니 지시 세 가지):
+ * (1) 글쓰기①을 write1/app.js v1.9(카카오톡식 상소 장면, 카드 선택 없이
+ * 참고 목록만)와 같은 구조로 맞췄다 — v2.0 이후 write1/만 v1.4~v1.9로
+ * 앞서가고 메인 시뮬은 v1.2/v1.3 구조에 머물러 있던 격차를 해소.
+ * (2) "실제로는 이렇게 됐어" 결과 피드백을 판단과 같은 화면에 바로 띄우지
+ * 않고 renderSahwaResult(새 스텝 타입 sahwaResult)로 분리했다 — data.js의
+ * m_result/k_result가 refStageId로 원본 sahwaStage를 가리켜 judgment.feedback을
+ * 그대로 재사용한다.
+ * (3) 한자 표기를 전부 없애고 쉬운 말로 풀었다(data.js).
  * ══════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -146,11 +156,13 @@
     return !!parseStudentId(SESSION.sid) && SESSION.name.trim().length > 0;
   }
 
-  /* ══════════════ 글쓰기① — 카드 분류(사림·훈구) → 카드 두 장 골라 한 마디
-   * 쓰기 (v1.2, v1.4). write1/app.js(독립 배포 페이지)와 같은 흐름을 이
-   * 스텝 기반 앱 안에 이식한 것. ⚠️ 이 섹션 전체를 손대지 않는다(효니 지시,
-   * 2026-09-28) — write1/과 localStorage 필드를 공유하고 있어서, 여기를
-   * 고치면 독립 페이지 쪽과 어긋난다. ══════════════ */
+  /* ══════════════ 글쓰기① — 카드 분류(사림·훈구) → 상소 올리기
+   * (v1.2, v1.4, v3.2). write1/app.js(독립 배포 페이지)와 같은 흐름을 이
+   * 스텝 기반 앱 안에 이식한 것. write1_classification/write1_locked/
+   * write1_attempts/write1_text 필드로 write1/과 localStorage를 공유하므로
+   * 이 필드 이름은 바꾸지 않는다 — 다만 write1/이 v1.4~v1.9로 먼저 바뀌고
+   * 여기가 v1.2/v1.3에 머물러 있던 격차는 v3.2에서 해소했다(renderWrite1Write
+   * 참고, 아래쪽). ══════════════ */
   function shuffledIds(cards) {
     var ids = cards.map(function (c) { return c.id; });
     for (var i = ids.length - 1; i > 0; i--) {
@@ -162,10 +174,6 @@
   function write1CardById(step, id) {
     for (var i = 0; i < step.cards.length; i++) { if (step.cards[i].id === id) return step.cards[i]; }
     return null;
-  }
-  function write1CardText(step, id) {
-    var c = write1CardById(step, id);
-    return c ? c.text : '';
   }
   function write1CardsBySide(step, side) {
     return step.cards.filter(function (c) { return c.answer === side; });
@@ -298,23 +306,28 @@
     var hoonguCards = write1CardsBySide(step, 'hoongu');
     var text = ANSWERS.write1_text || '';
     var html = '<div class="card">';
-    html += '<h2>🖋️ ' + escapeHtml(step.title) + ' — 한 마디 쓰기</h2>';
-    html += '<span class="role-badge">' + escapeHtml(step.writeRole) + '</span>';
-    html += '<p class="lead">' + escapeHtml(step.writeLead) + '</p>';
-    html += '<label class="field-label">사림 카드 하나 선택</label>';
-    html += '<div class="choice-list">';
-    sarimCards.forEach(function (c) {
-      html += '<button type="button" class="choice-btn' + (ANSWERS.write1_sarim_card === c.id ? ' selected' : '') + '" data-group="sarim" data-card="' + c.id + '">' + escapeHtml(c.text) + '</button>';
-    });
+    html += '<h2>🖋️ ' + escapeHtml(step.title) + ' — 상소 올리기</h2>';
+    // 카카오톡식 말풍선 채팅(.chat-wrap/.chat-line/.avatar/.bubble)은 write1/app.js
+    // v1.8~v1.9와 같은 검증된 패턴 — 그대로 재사용한다(효니 지시, 2026-09-28,
+    // 메인 시뮬도 write1/과 같은 버전으로 맞춤).
+    html += '<div class="chat-wrap">';
+    html += '<div class="chat-narration">' + escapeHtml(step.chatNarration) + '</div>';
+    html += '<div class="chat-line royal">';
+    html += '<div class="avatar royal">성</div>';
+    html += '<div class="chat-body"><div class="who">성종</div><div class="bubble">' + escapeHtml(step.chatKingLine) + '</div></div>';
     html += '</div>';
-    html += '<label class="field-label">훈구 카드 하나 선택</label>';
-    html += '<div class="choice-list">';
-    hoonguCards.forEach(function (c) {
-      html += '<button type="button" class="choice-btn' + (ANSWERS.write1_hoongu_card === c.id ? ' selected' : '') + '" data-group="hoongu" data-card="' + c.id + '">' + escapeHtml(c.text) + '</button>';
-    });
     html += '</div>';
-    html += '<label class="field-label">한 마디</label>';
-    html += '<textarea class="text-field" rows="4" data-key="write1_text" placeholder="' + escapeAttr(step.writePlaceholder) + '">' + escapeHtml(text) + '</textarea>';
+    html += '<p class="lead">' + escapeHtml(step.writeIntro) + '</p>';
+    html += '<div class="ref-cards">';
+    html += '<div class="ref-col ref-col-sarim"><div class="ref-col-head">📜 사림</div>';
+    sarimCards.forEach(function (c) { html += '<div class="ref-item">' + escapeHtml(c.text) + '</div>'; });
+    html += '</div>';
+    html += '<div class="ref-col ref-col-hoongu"><div class="ref-col-head">🏛 훈구</div>';
+    hoonguCards.forEach(function (c) { html += '<div class="ref-item">' + escapeHtml(c.text) + '</div>'; });
+    html += '</div>';
+    html += '</div>';
+    html += '<label class="field-label">✍️ 전하께 아뢸 말</label>';
+    html += '<textarea class="text-field" rows="2" data-key="write1_text" placeholder="' + escapeAttr(step.writePlaceholder) + '">' + escapeHtml(text) + '</textarea>';
     html += hintHtml('write1_text', step.writingHint);
     html += '<div class="note-box">' + escapeHtml(step.doneNote) + '</div>';
     html += '<div class="padlet-box" style="margin-top:16px;">';
@@ -326,19 +339,11 @@
     return {
       html: html,
       afterMount: function (root) {
-        root.querySelectorAll('.choice-btn[data-group]').forEach(function (btn) {
-          btn.addEventListener('click', function () {
-            setAnswer('write1_' + btn.getAttribute('data-group') + '_card', btn.getAttribute('data-card'));
-            renderCurrentStep();
-          });
-        });
         bindTextFieldsAndHints(root);
         var copyBtn = root.querySelector('#copyWrite1');
         if (copyBtn) {
           copyBtn.addEventListener('click', function () {
-            var payload = '사림 카드: ' + write1CardText(step, ANSWERS.write1_sarim_card) + '\n' +
-              '훈구 카드: ' + write1CardText(step, ANSWERS.write1_hoongu_card) + '\n' +
-              '한 마디: ' + (ANSWERS.write1_text || '');
+            var payload = ANSWERS.write1_text || '';
             copyToClipboard(payload).then(function (ok) {
               var statusEl = document.getElementById('copyStatus');
               if (statusEl) statusEl.textContent = ok ? '복사됐어. Padlet에 붙여넣어줘.' : '복사에 실패했어. 직접 옮겨 적어줘.';
@@ -501,14 +506,6 @@
     html += '<textarea class="text-field" rows="2" data-key="' + reasonKey + '">' + escapeHtml(ANSWERS[reasonKey] || '') + '</textarea>';
     html += hintHtml(reasonKey, step.judgment.reasonHint);
 
-    if (chosen) {
-      html += '<div class="feedback-box"><strong>⚔️ 실제로는 이렇게 됐어</strong>';
-      html += '<p>' + escapeHtml(step.judgment.feedback[chosen] || '') + '</p>';
-      if (step.resultQuote) html += '<div class="source-quote">' + escapeHtml(step.resultQuote.text) + '</div>';
-      step.resultFacts.forEach(function (f) { html += '<p>' + escapeHtml(f.text) + '</p>'; });
-      html += '</div>';
-    }
-
     html += '</div>';
     return {
       html: html,
@@ -526,6 +523,27 @@
         }
       }
     };
+  }
+
+  /* ══════════════ 사화 결과 카드 — 판단 직후 같은 화면에 바로 보여주지 않고
+   * 별도 스텝으로 분리했다(효니 지시, 2026-09-28). refStageId로 원본 sahwaStage를
+   * 찾아 그 judgment.feedback[선택]을 그대로 재사용한다 — 결과 데이터를
+   * 두 곳에 중복 저장하지 않기 위함. ══════════════ */
+  function renderSahwaResult(step) {
+    var refStep = findStep(step.refStageId);
+    var chosen = ANSWERS[step.refStageId + '_choice'];
+    var feedbackText = (refStep && refStep.judgment && refStep.judgment.feedback) ? (refStep.judgment.feedback[chosen] || '') : '';
+
+    var html = '<div class="card stage-card">';
+    html += '<span class="stage-badge">' + escapeHtml(step.badge) + '</span>';
+    html += '<h2>' + escapeHtml(step.title) + '</h2>';
+    html += '<div class="feedback-box"><strong>⚔️ 실제로는 이렇게 됐어</strong>';
+    html += '<p>' + escapeHtml(feedbackText) + '</p>';
+    if (step.resultQuote) html += '<div class="source-quote">' + escapeHtml(step.resultQuote.text) + '</div>';
+    (step.resultFacts || []).forEach(function (f) { html += '<p>' + escapeHtml(f.text) + '</p>'; });
+    html += '</div>';
+    html += '</div>';
+    return { html: html };
   }
 
   /* ══════════════ 전환 카드 (카드뉴스형) ══════════════ */
@@ -561,14 +579,11 @@
    * 사항). 힌트도 항상 질문형으로만 "무엇을 떠올려야 하는지" 축만 제시하고
    * 결론 문장은 절대 제공하지 않는다 — data.js essayParts의 hint 필드 참고. */
   function renderRecap(step) {
-    var write1Step = findStep('write1');
-    var sarimCardText = write1CardText(write1Step, ANSWERS.write1_sarim_card) || '(기록 없음)';
-    var hoonguCardText = write1CardText(write1Step, ANSWERS.write1_hoongu_card) || '(기록 없음)';
     var mStep = findStep('m_stage'), kStep = findStep('k_stage');
     var html = '<div class="card">';
     html += '<h2>' + escapeHtml(step.title) + '</h2>';
 
-    html += '<div class="recap-item"><h3>글쓰기 ① — 고른 카드와 한 마디</h3><div class="recap-value">사림 카드: ' + escapeHtml(sarimCardText) + '<br>훈구 카드: ' + escapeHtml(hoonguCardText) + (ANSWERS.write1_text ? ('<br>' + escapeHtml(ANSWERS.write1_text)) : '') + '</div></div>';
+    html += '<div class="recap-item"><h3>글쓰기 ① — 전하께 아뢴 말</h3><div class="recap-value">' + escapeHtml(ANSWERS.write1_text || '(기록 없음)') + '</div></div>';
 
     html += '<div class="recap-item"><h3>무오사화 — 네 판단</h3>';
     html += '<div class="recap-value">' + escapeHtml('(' + (ANSWERS.m_stage_choice || '?') + ') ' + labelForChoice(mStep, ANSWERS.m_stage_choice)) + '<br>' + escapeHtml(ANSWERS.m_stage_reason || '') + '</div></div>';
@@ -648,7 +663,7 @@
   /* ══════════════ 스텝 완료 판정 (다음 버튼 활성화 조건) ══════════════ */
   function stepIsComplete(step) {
     switch (step.type) {
-      case 'write1': return !!ANSWERS.write1_sarim_card && !!ANSWERS.write1_hoongu_card && (ANSWERS.write1_text || '').trim().length >= WRITE1_MIN_TEXT_LEN;
+      case 'write1': return (ANSWERS.write1_text || '').trim().length >= WRITE1_MIN_TEXT_LEN;
       case 'sahwaStage': return !!ANSWERS[step.id + '_choice'] && (ANSWERS[step.id + '_reason'] || '').trim().length > 0;
       default: return true;
     }
@@ -658,6 +673,7 @@
   var RENDERERS = {
     write1: renderWrite1,
     sahwaStage: renderSahwaStage,
+    sahwaResult: renderSahwaResult,
     transitionCards: renderTransitionCards,
     recap: renderRecap
   };
@@ -772,15 +788,11 @@
   function buildReflection() {
     var lines = [];
     function push(label, val) { if (val) lines.push('[' + label + '] ' + val); }
-    push('글쓰기① 사림 카드', write1CardText(findStep('write1'), ANSWERS.write1_sarim_card));
-    push('글쓰기① 훈구 카드', write1CardText(findStep('write1'), ANSWERS.write1_hoongu_card));
-    push('글쓰기① 한 마디', ANSWERS.write1_text);
+    push('글쓰기① 상소', ANSWERS.write1_text);
     push('무오 판단 이유', ANSWERS.m_stage_reason);
     push('기묘 판단 이유', ANSWERS.k_stage_reason);
-    push('서논술 주장', ANSWERS.essay_claim);
-    push('서논술 근거', ANSWERS.essay_evidence);
-    push('서논술 반론', ANSWERS.essay_counter);
-    push('서논술 결론', ANSWERS.essay_conclusion);
+    push('서논술 주장과 근거', ANSWERS.essay_point);
+    push('서논술 반론과 결론', ANSWERS.essay_response);
     return lines.join('\n');
   }
 
