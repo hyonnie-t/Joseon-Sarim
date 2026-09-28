@@ -16,15 +16,17 @@
   var stepIndex = -1; // -1 = 로그인 확인 화면, 0..N-1 = CONTENT.steps
   var submitState = 'idle'; // idle | saving | done | failed
 
-  /* ── 글쓰기① 전용 상태(v1.2) — 카드 분류 단계는 ANSWERS에 바로 반영되지 않는
-   * "몇 번 틀렸는지/이번에 뭐가 틀렸는지" 같은 화면 표시용 상태가 필요해서
-   * write1/app.js(독립 페이지)와 같은 방식으로 모듈 변수로 따로 둔다.
-   * loadAnswers() 직후 initWrite1State()가 저장된 답으로 한 번 맞춰준다. */
+  /* ── 글쓰기① 전용 상태(v1.2, v1.4) — 카드 분류 단계는 ANSWERS에 바로 반영되지
+   * 않는 "몇 번 틀렸는지" 같은 화면 표시용 상태가 필요해서 write1/app.js(독립
+   * 페이지)와 같은 방식으로 모듈 변수로 따로 둔다. WRITE1_CLASSIFY는 "담지 않은
+   * 카드 더미 ↔ 사림/훈구 상자" 중 상자 쪽에 들어간 카드(확정 전 포함), 확인
+   * 결과 맞은 카드만 WRITE1_LOCKED에 true로 남는다. loadAnswers() 직후
+   * initWrite1State()가 저장된 답으로 한 번 맞춰준다. */
   var WRITE1_MIN_TEXT_LEN = 10;
   var WRITE1_CARD_ORDER = null;
   var WRITE1_CLASSIFY = {};
-  var WRITE1_WRONG = [];
-  var WRITE1_CHECKED = false;
+  var WRITE1_LOCKED = {};
+  var WRITE1_LAST_WRONG_COUNT = 0;
   var WRITE1_PHASE = 'classify'; // classify | write
 
   /* ── 학번 파싱: 학년(1) + 반(2) + 번호(2) 5자리. history26 parseStudentId()와 같은 규칙. ── */
@@ -163,11 +165,13 @@
     return !!parseStudentId(SESSION.sid) && SESSION.name.trim().length > 0;
   }
 
-  /* ── 글쓰기 ① — 카드 분류(사림·훈구) → 카드 두 장 골라 한 마디 쓰기 (v1.2) ──
+  /* ── 글쓰기 ① — 카드 분류(사림·훈구) → 카드 두 장 골라 한 마디 쓰기 (v1.2, v1.4) ──
    * write1/app.js(독립 배포 페이지)와 같은 흐름을 이 스텝 기반 앱 안에 이식한
    * 것. 전역 이전/다음 내비게이션은 그대로 두고, 그 안에서 phase(classify/write)
    * 를 자체적으로 넘긴다 — "확인하기"는 스텝을 넘기는 버튼이 아니라 카드 분류가
-   * 맞았는지만 확인하는 별도 버튼이다. */
+   * 맞았는지만 확인하는 별도 버튼이다.
+   * v1.4: 카드마다 버튼 2개 + 하이라이트만 하던 걸 "담지 않은 카드 더미 → 사림/
+   * 훈구 상자로 실제로 옮겨 담는" 방식으로 바꿨다(write1/app.js와 동일). */
   function shuffledIds(cards) {
     var ids = cards.map(function (c) { return c.id; });
     for (var i = ids.length - 1; i > 0; i--) {
@@ -187,12 +191,34 @@
   function write1CardsBySide(step, side) {
     return step.cards.filter(function (c) { return c.answer === side; });
   }
-  function write1CardsToShow(step) {
-    if (!WRITE1_CHECKED) return WRITE1_CARD_ORDER;
-    return WRITE1_CARD_ORDER.filter(function (id) { return WRITE1_WRONG.indexOf(id) !== -1; });
+  function write1PoolIds() {
+    return WRITE1_CARD_ORDER.filter(function (id) { return !(id in WRITE1_CLASSIFY); });
   }
-  function write1AllClassified(ids) {
-    return ids.every(function (id) { return !!WRITE1_CLASSIFY[id]; });
+  function write1ZoneIds(side) {
+    return WRITE1_CARD_ORDER.filter(function (id) { return WRITE1_CLASSIFY[id] === side; });
+  }
+  function write1PersistClassification() {
+    setAnswer('write1_classification', WRITE1_CLASSIFY);
+    ANSWERS.write1_locked = WRITE1_LOCKED;
+    saveAnswers();
+  }
+  function write1AssignCard(id, side) { WRITE1_CLASSIFY[id] = side; write1PersistClassification(); }
+  function write1UnassignCard(id) { if (WRITE1_LOCKED[id]) return; delete WRITE1_CLASSIFY[id]; write1PersistClassification(); }
+
+  function write1CheckClassification(step) {
+    ANSWERS.write1_attempts = (ANSWERS.write1_attempts || 0) + 1;
+    setAnswer('write1_attempts', ANSWERS.write1_attempts);
+    var wrong = 0;
+    WRITE1_CARD_ORDER.forEach(function (id) {
+      if (WRITE1_LOCKED[id] || !(id in WRITE1_CLASSIFY)) return;
+      var card = write1CardById(step, id);
+      if (WRITE1_CLASSIFY[id] === card.answer) { WRITE1_LOCKED[id] = true; }
+      else { delete WRITE1_CLASSIFY[id]; wrong++; }
+    });
+    write1PersistClassification();
+    WRITE1_LAST_WRONG_COUNT = wrong;
+    if (wrong === 0) WRITE1_PHASE = 'write';
+    renderCurrentStep();
   }
 
   // 로그인 확인 직후 한 번 호출 — 저장된 답으로 카드 순서·분류 상태·phase를 맞춘다.
@@ -200,79 +226,89 @@
     var step = findStep('write1');
     WRITE1_CARD_ORDER = shuffledIds(step.cards);
     WRITE1_CLASSIFY = ANSWERS.write1_classification || {};
-    var allCorrect = step.cards.length > 0 && step.cards.every(function (c) { return WRITE1_CLASSIFY[c.id] === c.answer; });
-    if (allCorrect) {
-      WRITE1_CHECKED = true;
-      WRITE1_WRONG = [];
-      WRITE1_PHASE = 'write';
-    } else {
-      WRITE1_CHECKED = (ANSWERS.write1_attempts || 0) > 0;
-      WRITE1_WRONG = WRITE1_CHECKED ? step.cards.filter(function (c) { return WRITE1_CLASSIFY[c.id] !== c.answer; }).map(function (c) { return c.id; }) : [];
-      WRITE1_PHASE = 'classify';
-    }
+    WRITE1_LOCKED = ANSWERS.write1_locked || {};
+    WRITE1_LAST_WRONG_COUNT = 0;
+    var allLocked = step.cards.length > 0 && step.cards.every(function (c) { return !!WRITE1_LOCKED[c.id]; });
+    WRITE1_PHASE = allLocked ? 'write' : 'classify';
   }
 
   function renderWrite1(step) {
     return WRITE1_PHASE === 'write' ? renderWrite1Write(step) : renderWrite1Classify(step);
   }
 
+  function write1SortZoneHtml(side, label, ids) {
+    var html = '<div class="sort-zone sort-zone-' + side + '">';
+    html += '<div class="sort-zone-head">' + label + '</div>';
+    html += '<div class="sort-zone-list">';
+    ids.forEach(function (id) {
+      var card = write1CardById(findStep('write1'), id);
+      var locked = !!WRITE1_LOCKED[id];
+      html += '<div class="sort-chip' + (locked ? ' locked' : '') + '">';
+      html += '<span class="sort-chip-text">' + escapeHtml(card.text) + '</span>';
+      if (locked) html += '<span class="sort-chip-check" title="확인 완료">✔</span>';
+      else html += '<button type="button" class="sort-chip-undo" data-undo="' + id + '" aria-label="상자에서 빼기">↩</button>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+    return html;
+  }
+
   function renderWrite1Classify(step) {
-    var ids = write1CardsToShow(step);
+    var pool = write1PoolIds();
     var html = '<div class="card">';
-    html += '<h2>' + escapeHtml(step.title) + ' — 카드 분류</h2>';
+    html += '<h2>🗂️ ' + escapeHtml(step.title) + ' — 카드 분류</h2>';
     html += '<p class="lead">' + escapeHtml(step.classifyLead) + '</p>';
-    if (WRITE1_CHECKED && ids.length > 0) {
+    if (WRITE1_LAST_WRONG_COUNT > 0) {
       html += '<div class="note-box">' + escapeHtml(step.wrongMsg) + '</div>';
     }
-    html += '<div class="classify-list">';
-    ids.forEach(function (id) {
-      var card = write1CardById(step, id);
-      var picked = WRITE1_CLASSIFY[id];
-      html += '<div class="classify-card" data-card-row="' + id + '">';
-      html += '<p class="classify-text">' + escapeHtml(card.text) + '</p>';
-      html += '<div class="classify-btns">';
-      html += '<button type="button" class="classify-btn' + (picked === 'sarim' ? ' selected-sarim' : '') + '" data-card="' + id + '" data-side="sarim">사림</button>';
-      html += '<button type="button" class="classify-btn' + (picked === 'hoongu' ? ' selected-hoongu' : '') + '" data-card="' + id + '" data-side="hoongu">훈구</button>';
-      html += '</div></div>';
-    });
+    html += '<div class="sort-board">';
+    html += '<div class="sort-pool">';
+    html += '<div class="sort-pool-head">🗂️ 아직 담지 않은 카드 <span class="sort-pool-count">' + pool.length + '</span></div>';
+    if (pool.length > 0) {
+      html += '<div class="sort-pool-list">';
+      pool.forEach(function (id) {
+        var card = write1CardById(step, id);
+        html += '<div class="sort-item">';
+        html += '<p class="sort-item-text">' + escapeHtml(card.text) + '</p>';
+        html += '<div class="sort-item-btns">';
+        html += '<button type="button" class="sort-btn sort-btn-sarim" data-card="' + id + '" data-side="sarim">📜 사림 상자에 담기</button>';
+        html += '<button type="button" class="sort-btn sort-btn-hoongu" data-card="' + id + '" data-side="hoongu">🏛 훈구 상자에 담기</button>';
+        html += '</div></div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<p class="sort-pool-empty">다 담았어. 아래 "확인하기"를 눌러봐.</p>';
+    }
     html += '</div>';
-    html += '<div class="nav-row"><button type="button" class="nav-btn next" id="checkClassify"' + (write1AllClassified(ids) ? '' : ' disabled') + '>확인하기</button></div>';
+    html += '<div class="sort-zones">';
+    html += write1SortZoneHtml('sarim', '📜 사림 상자', write1ZoneIds('sarim'));
+    html += write1SortZoneHtml('hoongu', '🏛 훈구 상자', write1ZoneIds('hoongu'));
+    html += '</div>';
+    html += '</div>';
+    html += '<div class="nav-row"><button type="button" class="nav-btn next" id="checkClassify"' + (pool.length === 0 ? '' : ' disabled') + '>확인하기</button></div>';
     html += '</div>';
     return {
       html: html,
       afterMount: function (root) {
-        var checkBtn = root.querySelector('#checkClassify');
-        // 카드가 10장이라 다른 스텝의 choice-btn처럼 클릭마다 renderCurrentStep()을
-        // 부르면 매번 화면이 맨 위로 스크롤돼 버린다(카드를 10번 눌러야 하는데
-        // 그때마다 스크롤이 튀는 건 write1/app.js에서도 피했던 문제) — 여기서는
-        // 버튼 클래스만 직접 바꿔서 스크롤 위치를 유지한다.
-        root.querySelectorAll('.classify-btn').forEach(function (btn) {
-          btn.addEventListener('click', function () {
-            var id = btn.getAttribute('data-card');
-            var side = btn.getAttribute('data-side');
-            WRITE1_CLASSIFY[id] = side;
-            setAnswer('write1_classification', WRITE1_CLASSIFY);
-
-            var row = root.querySelector('.classify-card[data-card-row="' + id + '"]');
-            row.querySelectorAll('.classify-btn').forEach(function (b) {
-              b.classList.remove('selected-sarim', 'selected-hoongu');
-            });
-            btn.classList.add(side === 'sarim' ? 'selected-sarim' : 'selected-hoongu');
-
-            checkBtn.disabled = !write1AllClassified(write1CardsToShow(step));
-          });
+        // 카드가 10장이라 클릭마다 renderCurrentStep()의 기본 동작(맨 위로 스크롤)을
+        // 그대로 쓰면 상자에 담을 때마다 화면이 튄다 — write1/app.js와 동일하게
+        // preserveScroll=true로 다시 그려서 스크롤 위치를 유지한다.
+        var board = root.querySelector('.sort-board');
+        board.addEventListener('click', function (e) {
+          var sortBtn = e.target.closest('.sort-btn');
+          if (sortBtn) {
+            write1AssignCard(sortBtn.getAttribute('data-card'), sortBtn.getAttribute('data-side'));
+            renderCurrentStep(true);
+            return;
+          }
+          var undoBtn = e.target.closest('.sort-chip-undo');
+          if (undoBtn) {
+            write1UnassignCard(undoBtn.getAttribute('data-undo'));
+            renderCurrentStep(true);
+          }
         });
-        checkBtn.addEventListener('click', function () {
-          var visible = write1CardsToShow(step);
-          ANSWERS.write1_attempts = (ANSWERS.write1_attempts || 0) + 1;
-          setAnswer('write1_attempts', ANSWERS.write1_attempts);
-          var newWrong = visible.filter(function (id) {
-            return WRITE1_CLASSIFY[id] !== write1CardById(step, id).answer;
-          });
-          WRITE1_CHECKED = true;
-          WRITE1_WRONG = newWrong;
-          if (WRITE1_WRONG.length === 0) WRITE1_PHASE = 'write';
-          renderCurrentStep();
+        root.querySelector('#checkClassify').addEventListener('click', function () {
+          write1CheckClassification(step);
         });
       }
     };
@@ -283,7 +319,8 @@
     var hoonguCards = write1CardsBySide(step, 'hoongu');
     var text = ANSWERS.write1_text || '';
     var html = '<div class="card">';
-    html += '<h2>' + escapeHtml(step.title) + ' — 한 마디 쓰기</h2>';
+    html += '<h2>🖋️ ' + escapeHtml(step.title) + ' — 한 마디 쓰기</h2>';
+    html += '<span class="role-badge">' + escapeHtml(step.writeRole) + '</span>';
     html += '<p class="lead">' + escapeHtml(step.writeLead) + '</p>';
     html += '<label class="field-label">사림 카드 하나 선택</label>';
     html += '<div class="choice-list">';
@@ -669,7 +706,10 @@
     recap: renderRecap
   };
 
-  function renderCurrentStep() {
+  // preserveScroll=true면 스크롤 위치를 그대로 둔다 — 글쓰기① 카드 분류처럼
+  // 같은 화면 안에서 여러 번 눌러야 하는 조작에서 클릭마다 맨 위로 튀는 걸 막기
+  // 위함. 스텝 자체가 바뀌는 이동(이전/다음, 로그인 확인)은 그대로 위로 올린다.
+  function renderCurrentStep(preserveScroll) {
     var stepArea = document.getElementById('stepArea');
     var out;
     if (stepIndex === -1) {
@@ -683,7 +723,7 @@
     if (out.afterMount) out.afterMount(stepArea);
     updateProgress();
     updateNavState();
-    window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+    if (!preserveScroll) window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
 
     if (stepIndex >= 0 && CONTENT.steps[stepIndex].type === 'recap' && !SESSION.preview) {
       submitFinalIfNeeded();
