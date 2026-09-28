@@ -15,6 +15,16 @@
  * 글쓰기 단계에서는 역할(3사 관리) 배지를 넣어 어떤 입장에서 쓰는 글인지
  * 먼저 보이게 했다.
  *
+ * v1.5(2026-09-28, 효니 피드백 "글쓰기 마음에 안 들어" 반영) — 2단계(카드
+ * 선택) 카드 목록을 시뮬 전체에서 쓰는 공용 .choice-btn(큼직한 전체 폭 버튼)
+ * 대신 전용 .pick-chip으로 바꿨다. 분류 단계에서 이미 사림=쪽빛(jade),
+ * 훈구=금빛(amber)으로 색을 나눠놨는데, 다음 단계에서 똑같은 카드를 무채색
+ * 큰 버튼으로 다시 늘어놓으면 "방금 분류한 결과"처럼 안 보이고 "카드를 또
+ * 처음부터 고르는 세 번째 분류 단계"처럼 보였다. .pick-chip은 더 작고
+ * 조밀하며 분류 단계와 같은 색을 그대로 쓴다. 라벨에 이모지(📜/🏛)도 붙여
+ * 어느 쪽 목록인지 한눈에 구분되게 했다. .choice-btn/.choice-list는
+ * 최상위 app.js(본 시뮬)의 다른 판단 화면에서 그대로 쓰고 있어 손대지 않음.
+ *
  * ../config.js를 그대로 불러 쓴다(SHEET_WEBAPP_URL, PADLET_BY_BAN 공유) —
  * 백엔드 URL이나 Padlet 링크가 바뀌면 한 곳(config.js)만 고치면 된다.
  * GAME_NAME만 이 페이지 전용으로 따로 둔다: 나중에 전체 시뮬이 열리면
@@ -279,16 +289,16 @@
     html += '<h2>🖋️ 글쓰기 ① — 한 마디 쓰기</h2>';
     html += '<span class="role-badge">' + escapeHtml(WRITE_ROLE) + '</span>';
     html += '<p class="lead">' + escapeHtml(WRITE_INTRO) + '</p>';
-    html += '<label class="field-label">사림 카드 하나 선택</label>';
-    html += '<div class="choice-list">';
+    html += '<label class="field-label">📜 사림 카드 하나 선택</label>';
+    html += '<div class="pick-zone pick-zone-sarim">';
     sarimCards.forEach(function (c) {
-      html += '<button type="button" class="choice-btn' + (ANSWERS.write1_sarim_card === c.id ? ' selected' : '') + '" data-group="sarim" data-card="' + c.id + '">' + escapeHtml(c.text) + '</button>';
+      html += '<button type="button" class="pick-chip' + (ANSWERS.write1_sarim_card === c.id ? ' selected' : '') + '" data-group="sarim" data-card="' + c.id + '">' + escapeHtml(c.text) + '</button>';
     });
     html += '</div>';
-    html += '<label class="field-label">훈구 카드 하나 선택</label>';
-    html += '<div class="choice-list">';
+    html += '<label class="field-label">🏛 훈구 카드 하나 선택</label>';
+    html += '<div class="pick-zone pick-zone-hoongu">';
     hoonguCards.forEach(function (c) {
-      html += '<button type="button" class="choice-btn' + (ANSWERS.write1_hoongu_card === c.id ? ' selected' : '') + '" data-group="hoongu" data-card="' + c.id + '">' + escapeHtml(c.text) + '</button>';
+      html += '<button type="button" class="pick-chip' + (ANSWERS.write1_hoongu_card === c.id ? ' selected' : '') + '" data-group="hoongu" data-card="' + c.id + '">' + escapeHtml(c.text) + '</button>';
     });
     html += '</div>';
     html += '<label class="field-label">한 마디</label>';
@@ -363,7 +373,7 @@
       var submitBtn = root.querySelector('#submitWrite1');
       function refreshSubmitState() { submitBtn.disabled = !writeIsComplete(); }
 
-      root.querySelectorAll('.choice-btn').forEach(function (btn) {
+      root.querySelectorAll('.pick-chip').forEach(function (btn) {
         btn.addEventListener('click', function () {
           setAnswer('write1_' + btn.getAttribute('data-group') + '_card', btn.getAttribute('data-card'));
           render();
