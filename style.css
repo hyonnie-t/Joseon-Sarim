@@ -1,0 +1,201 @@
+/* ══════════════════════════════════════════════════════════
+ * style.css — history26 포털의 "역사책 페이지" 톤(종이/먹/쪽빛/낙관)을
+ * 그대로 가져와 통일감을 준다. 디자인 토큰은 history26/style.css의
+ * :root 값과 동일하게 맞췄다.
+ * ══════════════════════════════════════════════════════════ */
+:root{
+  --paper:#F6F3EB;
+  --ink:#23262C;
+  --ink-soft:#5A5F6A;
+  --indigo:#2E4A7A;
+  --indigo-deep:#1F3457;
+  --seal:#B03A2E;
+  --jade:#3E7C59;
+  --ochre:#C9972E;
+  --line:#D9D3C4;
+  --card:#FFFFFF;
+  --radius:14px;
+  --radius-sm:10px;
+  --radius-xs:8px;
+  --shadow:0 2px 10px rgba(35,38,44,.07);
+  --font-display:'Gowun Batang', serif;
+  --font-body:'Pretendard', -apple-system, sans-serif;
+  --amber-bg:#FFF9EC;
+  --amber-border:#EAD9A8;
+  --amber-text-deep:#5C4A16;
+  --indigo-bg:#F3F5FA;
+  --jade-bg:#E4EEE8;
+  --jade-border:#C4DECF;
+  --tap-min:44px;
+}
+
+*{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
+html{font-size:16px;}
+body{
+  font-family:var(--font-body);
+  background:var(--paper);
+  color:var(--ink);
+  line-height:1.6;
+  font-size:1rem; /* 16px 이상 유지 */
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+
+#app{max-width:720px; margin:0 auto; padding:20px 16px 64px;}
+
+/* ── 진행 표시줄 ── */
+.progress-wrap{position:sticky; top:0; z-index:10; background:var(--paper); padding:10px 0 14px;}
+.progress-track{height:6px; border-radius:999px; background:var(--line); overflow:hidden;}
+.progress-fill{height:100%; background:var(--indigo); transition:width .3s ease;}
+.progress-label{font-size:.86rem; color:var(--ink-soft); margin-top:6px; text-align:right;}
+
+/* ── 카드 공통 ── */
+.card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  padding:22px 20px;
+  margin-bottom:16px;
+}
+.card h2{
+  font-family:var(--font-display);
+  font-size:1.25rem;
+  margin-bottom:10px;
+  color:var(--indigo-deep);
+}
+.card .role-badge{
+  display:inline-block; font-size:.86rem; color:var(--indigo-deep);
+  background:var(--indigo-bg); border-radius:999px; padding:4px 12px; margin-bottom:12px;
+}
+.lead{color:var(--ink-soft); margin-bottom:14px; font-size:1.02rem;}
+
+/* ── 사실 서술 노드 ── */
+.fact{margin-bottom:14px; padding-left:14px; border-left:3px solid var(--line);}
+.fact p{font-size:1.03rem;}
+.fact-meta{margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
+.src-tag{
+  font-size:.78rem; padding:2px 9px; border-radius:999px; border:1px solid var(--line);
+  color:var(--ink-soft); background:var(--paper); white-space:nowrap;
+}
+.src-tag.tag-실록{border-color:var(--jade-border); background:var(--jade-bg); color:#254A37;}
+.src-tag.tag-교과서{border-color:#CFE0EF; background:#EEF4FB; color:var(--indigo-deep);}
+.src-tag.tag-2차{border-color:var(--amber-border); background:var(--amber-bg); color:var(--amber-text-deep);}
+.badge-unverified{
+  font-size:.78rem; padding:2px 9px; border-radius:999px;
+  background:#FBEAE8; color:var(--seal); border:1px solid #F0CFC9;
+}
+.easy-toggle{
+  margin-top:8px; font-size:.9rem; background:none; border:none; color:var(--indigo);
+  text-decoration:underline; cursor:pointer; padding:4px 0; min-height:var(--tap-min); text-align:left;
+}
+.easy-box{
+  margin-top:8px; padding:10px 12px; background:var(--indigo-bg); border-radius:var(--radius-xs);
+  font-size:.96rem; color:var(--ink);
+}
+.easy-box .easy-label{display:block; font-size:.78rem; color:var(--indigo-deep); margin-bottom:4px; font-weight:600;}
+
+/* ── 사료 원문 인용 박스 ── */
+.source-quote{
+  background:var(--indigo-bg); border-radius:var(--radius-xs); padding:16px;
+  font-family:var(--font-display); font-size:1.05rem; white-space:pre-wrap; line-height:1.8;
+  margin-bottom:10px;
+}
+.source-quote.placeholder{
+  background:#FBEAE8; color:#7A2E24; font-family:var(--font-body); font-size:.95rem;
+}
+
+/* ── 표 ── */
+table.cmp-table{width:100%; border-collapse:collapse; margin-bottom:10px; font-size:.96rem;}
+table.cmp-table caption{caption-side:top; text-align:left; font-size:.86rem; color:var(--ink-soft); margin-bottom:6px;}
+table.cmp-table th, table.cmp-table td{border:1px solid var(--line); padding:8px 10px; text-align:left;}
+table.cmp-table th{background:#F0EDE3;}
+
+/* ── 말풍선 채팅 ── */
+.chat-wrap{background:#B8C6D6; border-radius:var(--radius); padding:16px; margin-bottom:10px;}
+.chat-line{display:flex; margin-bottom:10px; gap:8px;}
+.chat-line .who{
+  flex:0 0 auto; font-size:.8rem; color:var(--ink-soft); align-self:flex-end; margin-bottom:4px; min-width:52px; text-align:right;
+}
+.bubble{
+  background:#FEE500; color:#1B1B1B; padding:10px 14px; border-radius:16px 16px 16px 4px;
+  font-size:1rem; max-width:78%; box-shadow:0 1px 3px rgba(0,0,0,.15);
+}
+.chat-line.royal{flex-direction:row-reverse;}
+.chat-line.royal .who{text-align:left;}
+.chat-line.royal .bubble{background:#FFFFFF; border-radius:16px 16px 4px 16px;}
+
+/* ── 선택지 버튼 ── */
+.choice-list{display:flex; flex-direction:column; gap:10px; margin-bottom:14px;}
+.choice-btn{
+  min-height:var(--tap-min); text-align:left; padding:14px 16px; border-radius:var(--radius-sm);
+  border:1.5px solid var(--line); background:var(--card); font-size:1rem; cursor:pointer;
+  transition:border-color .15s, background .15s;
+}
+.choice-btn:active{transform:scale(.99);}
+.choice-btn.selected{border-color:var(--indigo); background:var(--indigo-bg); font-weight:600;}
+
+/* ── 입력창 ── */
+.text-field{
+  width:100%; min-height:var(--tap-min); padding:10px 12px; border:1.5px solid var(--line);
+  border-radius:var(--radius-sm); font-size:1rem; font-family:var(--font-body); resize:vertical;
+  background:#FCFBF7;
+}
+.field-label{display:block; margin:12px 0 6px; font-weight:600; font-size:.98rem;}
+.hint-toggle{
+  background:none; border:none; color:var(--ochre); font-size:.9rem; cursor:pointer;
+  padding:4px 0; min-height:var(--tap-min); text-align:left;
+}
+.hint-box{
+  margin-top:6px; padding:8px 12px; background:var(--amber-bg); border:1px solid var(--amber-border);
+  border-radius:var(--radius-xs); font-size:.92rem; color:var(--amber-text-deep);
+}
+
+/* ── 하단 내비게이션 ── */
+.nav-row{display:flex; gap:10px; margin-top:18px;}
+.nav-btn{
+  flex:1; min-height:48px; border-radius:var(--radius-sm); font-size:1.02rem; font-weight:600;
+  cursor:pointer; border:none;
+}
+.nav-btn.next{background:var(--indigo); color:#fff;}
+.nav-btn.next:disabled{background:#B9C2CE; cursor:not-allowed;}
+.nav-btn.prev{background:var(--card); color:var(--ink-soft); border:1.5px solid var(--line);}
+
+/* ── 해석 갈림 카드 ── */
+.view-card{border:1.5px solid var(--line); border-radius:var(--radius-sm); padding:14px; margin-bottom:10px; cursor:pointer;}
+.view-card.selected{border-color:var(--ochre); background:#FFF7EA;}
+.view-card .view-label{font-size:.8rem; color:var(--ink-soft); margin-bottom:4px;}
+
+/* ── 전환 카드 ── */
+.transition-card{text-align:center; padding:28px 20px;}
+.transition-years{
+  font-family:var(--font-display); font-size:1.1rem; color:var(--seal); margin-bottom:16px;
+}
+
+/* ── 회고 화면 ── */
+.recap-item{border-left:3px solid var(--jade); padding-left:14px; margin-bottom:16px;}
+.recap-item h3{font-size:1rem; margin-bottom:6px; color:var(--indigo-deep);}
+.recap-item .recap-value{background:var(--jade-bg); border-radius:var(--radius-xs); padding:8px 12px; font-size:.96rem;}
+.padlet-box{
+  margin-top:20px; padding:18px; background:var(--indigo-bg); border-radius:var(--radius);
+  text-align:center;
+}
+.padlet-link{
+  display:inline-block; margin-top:10px; padding:12px 24px; background:var(--seal); color:#fff;
+  border-radius:999px; text-decoration:none; font-weight:600; min-height:var(--tap-min);
+}
+
+/* ── 안내/경고 박스 ── */
+.note-box{
+  font-size:.9rem; color:var(--ink-soft); background:var(--paper); border:1px dashed var(--line);
+  border-radius:var(--radius-xs); padding:10px 12px; margin-top:10px;
+}
+.dev-banner{
+  background:#FBEAE8; color:#7A2E24; font-size:.86rem; padding:8px 14px; text-align:center;
+  border-bottom:1px solid #F0CFC9;
+}
+
+@media (max-width:640px){
+  #app{padding:14px 12px 56px;}
+  .card{padding:18px 16px;}
+}
