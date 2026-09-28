@@ -196,6 +196,32 @@ table.cmp-table th{background:#F0EDE3;}
 .pick-zone-hoongu .pick-chip{border-color:var(--amber-border); background:var(--amber-bg); color:var(--amber-text-deep);}
 .pick-chip.selected{border-color:var(--indigo); background:var(--indigo-bg); color:var(--ink); font-weight:600;}
 
+/* ── 글쓰기① 역할 배너 — 기존 작은 알약 배지(.role-badge)+회색 안내문(.lead) 조합은
+ * 역할이 눈에 잘 안 띈다는 지적으로 더 큰 박스로 교체. 역할 한 줄을 굵게 먼저 보여주고
+ * 그 아래 지시문을 같은 박스 안에 둬서 "지금 이 활동의 입장"이 한 덩어리로 읽히게 한다. */
+.role-banner{
+  border:1.5px solid var(--indigo); background:var(--indigo-bg); border-radius:var(--radius-sm);
+  padding:14px 16px; margin-bottom:16px;
+}
+.role-banner-role{font-weight:700; font-size:1.05rem; color:var(--indigo-deep); margin-bottom:6px;}
+.role-banner-body{color:var(--ink); font-size:.98rem; line-height:1.55;}
+
+/* ── 카드 선택 → 쓰기 연결 — 카드를 고르기 전엔 이 안내만 보이고(write-gate),
+ * 둘 다 고르면 방금 고른 카드 두 개를 그대로 다시 보여준 뒤(pick-recap) 그 아래
+ * 바로 쓰기 칸이 이어지게 해서, "이 두 카드를 근거로 쓴다"는 게 눈에 보이게 한다. */
+.write-gate{color:var(--ink-soft); font-size:.94rem; padding:6px 2px 2px;}
+.pick-recap{display:flex; flex-direction:column; gap:8px; margin:4px 0 16px;}
+.pick-recap-item{
+  border-radius:var(--radius-xs); padding:9px 12px; font-size:.9rem; line-height:1.5;
+  display:flex; gap:8px; align-items:flex-start;
+}
+.pick-recap-sarim{background:var(--jade-bg); border:1.5px solid var(--jade-border); color:#254A37;}
+.pick-recap-hoongu{background:var(--amber-bg); border:1.5px solid var(--amber-border); color:var(--amber-text-deep);}
+.pick-recap-tag{
+  flex:0 0 auto; font-weight:700; font-size:.8rem; background:rgba(255,255,255,.6);
+  border-radius:999px; padding:2px 8px;
+}
+
 @media (max-width:480px){
   .sort-zones{grid-template-columns:1fr;}
 }
