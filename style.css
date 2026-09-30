@@ -351,6 +351,15 @@ table.cmp-table th{background:#F0EDE3;}
   margin-top:20px; padding:18px; background:var(--indigo-bg); border-radius:var(--radius);
   text-align:center;
 }
+.submit-box{
+  margin-top:20px; padding:18px; background:var(--jade-bg); border-radius:var(--radius);
+  text-align:center;
+}
+.submit-btn{
+  margin-top:10px; padding:12px 24px; background:var(--indigo-deep); color:#fff; border:0;
+  border-radius:999px; font-weight:600; font-size:1rem; min-height:var(--tap-min); cursor:pointer;
+}
+.submit-btn:disabled{opacity:.6; cursor:default;}
 .padlet-link{
   display:inline-block; margin-top:10px; padding:12px 24px; background:var(--seal); color:#fff;
   border-radius:999px; text-decoration:none; font-weight:600; min-height:var(--tap-min);

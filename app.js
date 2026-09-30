@@ -38,7 +38,8 @@
   var SESSION = { sid: '', name: '', grade: null, ban: null, number: null, preview: false };
   var ANSWERS = {};
   var stepIndex = -1; // -1 = 로그인 확인 화면, 0..N-1 = CONTENT.steps
-  var submitState = 'idle'; // idle | saving | done | failed
+  var submitState = 'idle'; // idle | saving | done | failed | edited
+  var submitError = '';
 
   /* ── 글쓰기① 전용 상태(v1.2, v1.4) — 카드 분류 단계는 ANSWERS에 바로 반영되지
    * 않는 "몇 번 틀렸는지" 같은 화면 표시용 상태가 필요해서 write1/app.js(독립
@@ -84,6 +85,11 @@
 
   function setAnswer(key, value) {
     ANSWERS[key] = value;
+    // 제출한 뒤에 답이 바뀌면 "제출됨" 표시를 풀어 다시 제출할 수 있게 한다.
+    if (key.indexOf('__') !== 0 && ANSWERS.__submittedAt) {
+      delete ANSWERS.__submittedAt;
+      if (submitState === 'done') { submitState = 'edited'; updateSubmitStatus(); }
+    }
     saveAnswers();
   }
 
@@ -94,8 +100,17 @@
     return fetch(url, options).then(function (res) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.json().catch(function () { return { result: 'success' }; });
+    }).then(function (body) {
+      // 서버가 200으로 {result:'error'}를 돌려주는 경우(순차 게이트 등)는 성공이 아니다.
+      // 다시 보내도 결과가 같으니 재시도하지 않고 바로 실패로 넘긴다.
+      if (body && body.result === 'error') {
+        var e = new Error(body.message || '저장 실패');
+        e.noRetry = true;
+        throw e;
+      }
+      return body;
     }).catch(function (err) {
-      if (tries <= 1) throw err;
+      if (err.noRetry || tries <= 1) throw err;
       return new Promise(function (resolve) {
         setTimeout(function () { resolve(fetchJsonRetry(url, options, tries - 1, delayMs)); }, delayMs);
       });
@@ -606,10 +621,14 @@
     html += '<p id="essayCopyStatus" style="margin-top:8px; font-size:.86rem; color:var(--ink-soft);"></p>';
     html += '</div>';
 
+    html += '<div class="submit-box"><p>' + escapeHtml(step.submitLead) + '</p>';
+    html += '<button type="button" class="submit-btn" id="submitBtn">📮 기록 제출하기</button>';
+    html += '<p id="submitStatus" style="margin-top:10px; font-size:.9rem; color:var(--ink-soft);"></p>';
+    html += '</div>';
+
     html += '<div class="padlet-box"><p>' + escapeHtml(step.padletLead) + '</p>';
     html += '<p style="margin-top:8px; font-size:.94rem; color:var(--ink-soft);">' + escapeHtml(step.padletPrompt) + '</p>';
-    html += padletLinkHtml('글쓰기 ② 이어서 쓰기');
-    html += '<p id="submitStatus" style="margin-top:12px; font-size:.86rem; color:var(--ink-soft);"></p>';
+    html += padletLinkHtml('Padlet으로 이동하기');
     html += '</div></div>';
 
     return {
@@ -628,6 +647,10 @@
             });
           });
         }
+        var submitBtn = root.querySelector('#submitBtn');
+        if (submitBtn) submitBtn.addEventListener('click', submitFinal);
+        // 이미 제출한 기록이 있으면(새로고침 후 재진입) 제출됨 상태로 시작한다.
+        if (submitState === 'idle' && ANSWERS.__submittedAt) submitState = 'done';
         updateSubmitStatus();
       }
     };
@@ -696,10 +719,6 @@
     updateProgress();
     updateNavState();
     if (!preserveScroll) window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
-
-    if (stepIndex >= 0 && CONTENT.steps[stepIndex].type === 'recap' && !SESSION.preview) {
-      submitFinalIfNeeded();
-    }
   }
 
   // 상단 고정 진행바에 사건명을 보여준다(핸드오프 3번 — 숫자만 보이던 걸
@@ -796,9 +815,14 @@
     return lines.join('\n');
   }
 
-  function submitFinalIfNeeded() {
-    if (ANSWERS.__submitted === true) { updateSubmitStatus(); return; }
+  // 회고 화면의 "기록 제출하기" 버튼이 부른다. 서논술까지 다 쓴 뒤 눌러야
+  // 그 내용이 payload(reflection)에 실린다 — 화면 도착 시 자동 제출하던 v3.x까지는
+  // 서논술 칸이 비어 있는 채로 나갔다.
+  function submitFinal() {
+    if (submitState === 'saving') return;
+    if (SESSION.preview) { updateSubmitStatus(); return; }
     submitState = 'saving';
+    submitError = '';
     updateSubmitStatus();
     var payload = {
       studentId: SESSION.sid,
@@ -815,11 +839,12 @@
       body: JSON.stringify(payload)
     }).then(function () {
       submitState = 'done';
-      ANSWERS.__submitted = true;
+      ANSWERS.__submittedAt = new Date().toISOString();
       saveAnswers();
       updateSubmitStatus();
     }).catch(function (err) {
       submitState = 'failed';
+      submitError = (err && err.noRetry && err.message) ? err.message : '';
       console.warn('[joseon-sarim] 제출 실패:', err);
       updateSubmitStatus();
     });
@@ -827,11 +852,19 @@
 
   function updateSubmitStatus() {
     var el = document.getElementById('submitStatus');
+    var btn = document.getElementById('submitBtn');
     if (!el) return;
+    if (btn) {
+      btn.disabled = (submitState === 'saving' || submitState === 'done');
+      btn.textContent = submitState === 'saving' ? '제출하는 중…' :
+        submitState === 'done' ? '제출 완료 ✓' :
+        submitState === 'edited' ? '📮 수정한 내용 다시 제출하기' : '📮 기록 제출하기';
+    }
     if (SESSION.preview) { el.textContent = '(미리보기 모드 — 기록 저장 안 됨)'; return; }
-    if (submitState === 'saving') el.textContent = '기록 저장 중...';
-    else if (submitState === 'done') el.textContent = '기록이 저장됐어.';
-    else if (submitState === 'failed') el.textContent = '기록 저장에 실패했어. 화면을 새로고침해서 다시 시도해봐.';
+    if (submitState === 'done') el.textContent = '제출됐어.';
+    else if (submitState === 'failed') el.textContent = submitError
+      ? '제출하지 못했어. ' + submitError
+      : '제출하지 못했어. 인터넷을 확인하고 버튼을 다시 눌러 줘. 쓴 글은 그대로 남아 있어.';
     else el.textContent = '';
   }
 
