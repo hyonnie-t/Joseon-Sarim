@@ -165,8 +165,17 @@
     return fetch(url, options).then(function (res) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.json().catch(function () { return { result: 'success' }; });
+    }).then(function (body) {
+      // 서버가 200으로 {result:'error'}를 돌려주는 경우는 성공이 아니다.
+      // 다시 보내도 결과가 같으니 재시도하지 않고 바로 실패로 넘긴다(../app.js와 동일).
+      if (body && body.result === 'error') {
+        var e = new Error(body.message || '저장 실패');
+        e.noRetry = true;
+        throw e;
+      }
+      return body;
     }).catch(function (err) {
-      if (tries <= 1) throw err;
+      if (err.noRetry || tries <= 1) throw err;
       return new Promise(function (resolve) {
         setTimeout(function () { resolve(fetchJsonRetry(url, options, tries - 1, delayMs)); }, delayMs);
       });
@@ -489,7 +498,9 @@
     }).catch(function (err) {
       submitState = 'failed';
       console.warn('[write1] 제출 실패:', err);
-      if (statusEl) statusEl.textContent = '기록 저장에 실패했어. 다시 눌러줘.';
+      if (statusEl) statusEl.textContent = (err && err.noRetry && err.message)
+        ? '기록 저장에 실패했어. ' + err.message
+        : '기록 저장에 실패했어. 다시 눌러줘.';
     });
   }
 
