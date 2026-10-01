@@ -781,6 +781,7 @@
     if (stepIndex === -1) {
       if (!loginIsComplete()) return;
       loadAnswers(); // 확정된 SESSION.sid로 그 학생의 저장 기록을 불러온다
+      FocusGuard.start({ key: CONFIG.GAME_NAME + ':' + SESSION.sid }); // 작성 중 화면 이탈·붙여넣기 기록 (history26 snippets/focus_guard.js)
       initWrite1State(); // 글쓰기① 카드 순서·분류 상태를 저장된 답 기준으로 맞춘다
       stepIndex = 0;
       renderCurrentStep();
@@ -833,6 +834,7 @@
       reflection: buildReflection(),
       choicesJson: JSON.stringify(ANSWERS)
     };
+    Object.assign(payload, FocusGuard.payload());
     fetchJsonRetry(CONFIG.SHEET_WEBAPP_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
