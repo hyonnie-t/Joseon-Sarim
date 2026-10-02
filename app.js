@@ -896,6 +896,7 @@
     }
 
     renderCurrentStep();
+    Glossary.start({ terms: window.GLOSSARY, skip: ['.progress-wrap'] }); // 어려운 낱말 풀이 (glossary.js)
   }
 
   // 파일 내 모든 함수 선언이 끝난 뒤, 문서 로드 완료 시 한 번만 호출한다.
